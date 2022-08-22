@@ -1,15 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import Type, Union
 
-from .icommand import ICommand
+from .command_base import CommandBase
 
 
 class ISerializer(ABC):
     @abstractmethod
-    def serialize(self, cmd: ICommand) -> bytes: ...
+    def serialize(self, cmd: CommandBase) -> bytes: ...
 
     @abstractmethod
-    def deserialize(self, data: bytes) -> ICommand: ...
+    def deserialize(self, raw_data: Union[bytes, dict]) -> CommandBase: ...
 
     @abstractmethod
-    def register_cmd(self, cmd_type: Type[ICommand]): ...
+    def register_cmd(self, cmd_type: Type[CommandBase]): ...
