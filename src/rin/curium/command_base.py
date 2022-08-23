@@ -19,7 +19,9 @@ class CommandBase(cfg.BaseConfig, Generic[T], ABC):
             raise RuntimeError(f"{cls} should define a class variable: '__cmd_name__'")
         if "__cmd_name__" in vars(cls):
             __cmd_name__ = getattr(cls, "__cmd_name__")
-            cls.__cmd_name__ = cfg.Lazy(lambda c: __cmd_name__)
+            __cmd_name_option__ = cfg.Lazy(lambda c: __cmd_name__, name="__cmd_name__")
+            __cmd_name_option__.__name__ = "__cmd_name_option__"
+            cls.__cmd_name_option__ = __cmd_name_option__
 
     @abstractmethod
     def execute(self, ctx: "Node") -> T: ...

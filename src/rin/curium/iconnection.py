@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 
 class IConnection(ABC):
@@ -29,7 +29,7 @@ class IConnection(ABC):
         """
 
     @abstractmethod
-    def recv(self, block, timeout: float = 0) -> Optional[bytes]:
+    def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
         """
         :param block: is blocking or not
         :param timeout: timeout of this operation in second, 0 presents forever
