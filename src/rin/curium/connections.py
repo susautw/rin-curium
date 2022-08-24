@@ -1,6 +1,7 @@
 import time
 import uuid
-from threading import Thread, Event
+import warnings
+from threading import Thread, Event, Lock
 from typing import Optional, List
 
 from redis import Redis
@@ -17,9 +18,12 @@ class RedisConnection(IConnection):
     _namespace: str
     _expire: int
     _uid_key: Optional[str] = None
+    _uid: Optional[str] = None
 
     _refresh_thread: Optional[Thread] = None
     _refresh_thread_close: Event
+
+    _connecting_operation_lock: Lock
 
     def __init__(self, redis: Redis = None, namespace: str = "curium", expire: int = 600) -> None:
         self._redis = Redis() if redis is None else redis
@@ -27,20 +31,26 @@ class RedisConnection(IConnection):
         self._expire = expire
         self._pubsub = None
         self._refresh_thread_close = Event()
+        self._connecting_operation_lock = Lock()
 
     def connect(self) -> str:
-        self._pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
-        while True:
-            uid = str(uuid.uuid4())
-            uid_key = f'{self._namespace}:{uid}'
-            uid_code, _ = self._redis.pipeline().incr(uid_key).expire(uid_key, self._expire, nx=True).execute()
-            if uid_code == 1:
-                break
-        self._refresh_thread = Thread(target=self._refresh_uid, daemon=True)
-        self._refresh_thread_close.clear()
-        self._refresh_thread.start()
-        self._uid_key = uid_key
-        return uid
+        with self._connecting_operation_lock:
+            if self._pubsub is not None:
+                warnings.warn(f"Already connected. uid: {self._uid}", category=RuntimeWarning)
+                return self._uid
+            self._pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
+            while True:
+                uid = str(uuid.uuid4())
+                uid_key = f'{self._namespace}:{uid}'
+                uid_code, _ = self._redis.pipeline().incr(uid_key).expire(uid_key, self._expire, nx=True).execute()
+                if uid_code == 1:
+                    break
+            self._refresh_thread = Thread(target=self._refresh_uid, daemon=True)
+            self._refresh_thread_close.clear()
+            self._refresh_thread.start()
+            self._uid_key = uid_key
+            self._uid = uid
+            return uid
 
     def _refresh_uid(self) -> None:
         while not self._refresh_thread_close.wait(0):
@@ -48,14 +58,15 @@ class RedisConnection(IConnection):
             time.sleep(1)
 
     def close(self) -> None:
-        self.verify_connected()
-        self._pubsub.close()
-        self._pubsub = None
-        self._refresh_thread_close.set()
-        self._refresh_thread.join(timeout=2)
-        self._refresh_thread = None
+        with self._connecting_operation_lock:
+            self.verify_connected()
+            self._pubsub.close()
+            self._pubsub = None
+            self._refresh_thread_close.set()
+            self._refresh_thread.join(timeout=2)
+            self._refresh_thread = None
 
-        self._redis.delete(self._uid_key)
+            self._redis.delete(self._uid_key)
 
     def join(self, name: str) -> None:
         self._verify_name(name)

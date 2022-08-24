@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-# TODO Serializable Command with fancy-config
 class CommandBase(cfg.BaseConfig, Generic[T], ABC):
 
     __cmd_name__ = "command_base"

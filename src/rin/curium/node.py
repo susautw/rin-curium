@@ -1,5 +1,7 @@
+import logging
 from functools import lru_cache
 from itertools import count
+from threading import Lock
 from typing import List, TypeVar, Optional, Type, Any, Dict, Callable, MutableMapping, Union
 from weakref import WeakValueDictionary
 
@@ -10,7 +12,7 @@ from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer
 from .connections import RedisConnection
 from .response_handles import BlockUntilAllReceived
 from .serializers import JSONSerializer
-from .utils import option_only_filter
+from .utils import option_only_filter, atomicmethod
 
 R = TypeVar("R")
 
@@ -26,21 +28,29 @@ NoContextSpecified = object()
 
 class Node:
     _sent_cmd_response_handlers: MutableMapping[str, ResponseHandlerBase]
+    _rh_lock: Lock()
+
     _nid: str
     _connection: IConnection
+
     _serializer: ISerializer
     _cmd_count: count
 
     _cmd_contexts: Dict[str, Any]
+    _cmd_contexts_lock: Lock
 
     def __init__(self, connection: Union[Redis, IConnection], serializer: ISerializer = None):
         if isinstance(connection, Redis):
             connection = RedisConnection(connection)
         self._connection = connection
+        self._connection_lock = Lock()
         self._serializer = JSONSerializer() if serializer is None else serializer
-
         self._sent_cmd_response_handlers = WeakValueDictionary()
+        self._rh_lock = Lock()
+
         self._cmd_contexts = {}
+        self._cmd_contexts_lock = Lock()
+        self._cmd_count = count()
 
         self.register_cmd(CommandWrapper, self._serializer)
         self.register_cmd(SetResponse)
@@ -62,20 +72,37 @@ class Node:
     def send(
             self,
             cmd: CommandBase[R],
-            destinations: List[str],
+            destinations: Union[str, List[str]],
             response_handler: Optional[ResponseHandlerBase[R]],
             response_timeout: float = None
     ) -> ResponseHandlerBase[R]:
-        cid = str(next(self._cmd_count))
+        if isinstance(destinations, str):
+            destinations = [destinations]
+
+        cid = self._generate_cid()
         wrapped_cmd = CommandWrapper(nid=self._nid, cid=cid, cmd=cmd)
         rh = self._create_response_handler(response_handler, response_timeout)
-        self._sent_cmd_response_handlers[cid] = rh
-        num_receivers = self._connection.send(self._serializer.serialize(wrapped_cmd), destinations)
+        self._add_response_handler(cid, rh)
+        num_receivers = self.send_no_response(wrapped_cmd, destinations)
         rh.set_num_receivers(num_receivers)
         return rh
 
-    def send_no_response(self, cmd: CommandBase, destinations: List[str]) -> None:
-        self._connection.send(self._serializer.serialize(cmd), destinations)
+    def send_no_response(self, cmd: CommandBase, destinations: Union[str, List[str]]) -> Optional[int]:
+        if isinstance(destinations, str):
+            destinations = [destinations]
+        return self._connection.send(self._serializer.serialize(cmd), destinations)
+
+    @atomicmethod
+    def _generate_cid(self) -> str:
+        return str(next(self._cmd_count))
+
+    def _get_response_handler_by_cid(self, cid: str, default=None) -> Optional[ResponseHandlerBase]:
+        with self._rh_lock:
+            return self._sent_cmd_response_handlers.get(cid, default)
+
+    def _add_response_handler(self, cid: str, rh: ResponseHandlerBase) -> None:
+        with self._rh_lock:
+            self._sent_cmd_response_handlers[cid] = rh
 
     def _create_response_handler(
             self,
@@ -101,18 +128,24 @@ class Node:
         return cmd
 
     def register_cmd(self, cmd_typ: Type[CommandBase], ctx: Any = NoContextSpecified) -> None:
-        self._serializer.register_cmd(cmd_typ)
-        if ctx is not NoContextSpecified:
-            self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
+        with self._cmd_contexts_lock:
+            self._serializer.register_cmd(cmd_typ)
+            if ctx is not NoContextSpecified:
+                self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
 
     def get_cmd_context(self, name: str) -> Any:
-        return self._cmd_contexts[name]
+        with self._cmd_contexts_lock:
+            return self._cmd_contexts[name]
 
     def set_response(self, cid: str, response: Any) -> None:
-        if cid in self._sent_cmd_response_handlers:
-            self._sent_cmd_response_handlers[cid].set_response(response)
+        rh = self._get_response_handler_by_cid(cid)
+        if rh is not None:
+            rh.set_response(response)
         else:
-            pass  # TODO log warn here received response but command cid not found
+            response_str = f'{response}'
+            if len(response_str) > 50:
+                response_str = response_str[:50] + '...'
+            logging.warning(f"Received response {response_str}, but command {cid} not found")
 
     @property
     def nid(self) -> str:
@@ -143,7 +176,7 @@ class CommandWrapper(CommandBase[NoResponseType]):
     def execute(self, ctx: Node) -> NoResponseType:
         response = self.get_cmd(ctx).execute(ctx)
         if not isinstance(response, NoResponseType):
-            ctx.send_no_response(SetResponse(cid=self.cid, response=response), [self.nid])
+            ctx.send_no_response(SetResponse(cid=self.cid, response=response), self.nid)
         return NoResponse
 
     @lru_cache

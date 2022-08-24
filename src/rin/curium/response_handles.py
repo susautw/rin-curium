@@ -1,4 +1,5 @@
 import time
+import warnings
 from typing import TypeVar, Callable, Any
 
 from . import ResponseHandlerBase
@@ -8,7 +9,8 @@ T = TypeVar("T")
 
 class BlockUntilAllReceived(ResponseHandlerBase[T]):
     def __init__(self, timeout: float = None):
-        # TODO warnings.warn or logging.warn about No Timeout Specified
+        if timeout is None:
+            warnings.warn("No timeout specified may cause thread blocking forever", category=RuntimeWarning)
         super().__init__()
         self.timeout_at = timeout
         if timeout is not None:
@@ -16,8 +18,10 @@ class BlockUntilAllReceived(ResponseHandlerBase[T]):
 
     def finalize_internal(self) -> bool:
         if self.num_received_results is None and self.timeout_at is None:
-            # TODO warn about run forever
-            return True  # this will run forever, so should return True to stop this
+            warnings.warn("This response handler has DROPPED:  "
+                          "There is no number of received results or timeout provided. "
+                          "The issue will cause the thread to block forever. ", category=RuntimeWarning)
+            return True
         return self.num_received_results >= self.num_receivers or time.time() > self.timeout_at
 
 
