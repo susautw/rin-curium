@@ -47,9 +47,9 @@ class RedisConnection(IConnection):
                     break
             self._refresh_thread = Thread(target=self._refresh_uid, daemon=True)
             self._refresh_thread_close.clear()
-            self._refresh_thread.start()
             self._uid_key = uid_key
             self._uid = uid
+            self._refresh_thread.start()
             return uid
 
     def _refresh_uid(self) -> None:

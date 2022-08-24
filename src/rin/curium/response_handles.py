@@ -17,12 +17,14 @@ class BlockUntilAllReceived(ResponseHandlerBase[T]):
             self.timeout_at += time.time()
 
     def finalize_internal(self) -> bool:
-        if self.num_received_results is None and self.timeout_at is None:
+        if self.num_receivers is None and self.timeout_at is None:
             warnings.warn("This response handler has DROPPED:  "
                           "There is no number of received results or timeout provided. "
                           "The issue will cause the thread to block forever. ", category=RuntimeWarning)
             return True
-        return self.num_received_results >= self.num_receivers or time.time() > self.timeout_at
+        return self.num_received_results >= self.num_receivers or (
+                self.timeout_at is not None and time.time() > self.timeout_at
+        )
 
 
 class Callback(BlockUntilAllReceived[T]):

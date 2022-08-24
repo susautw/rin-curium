@@ -110,5 +110,5 @@ class atomicmethod:
         return getattr(self._method, "__isabstractmethod__", False)
 
 
-def option_only_filter(p: cfg.PlaceHolder) -> bool:
-    return isinstance(p, cfg.Option)
+def cmd_to_dict_filter(p: cfg.PlaceHolder) -> bool:
+    return isinstance(p, cfg.Option) or p.name == "__cmd_name__"

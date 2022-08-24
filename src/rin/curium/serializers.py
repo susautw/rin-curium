@@ -5,7 +5,7 @@ from typing import Type, Union, Dict
 from rin import jsonutils
 
 from . import ISerializer, CommandBase
-from .utils import option_only_filter
+from .utils import cmd_to_dict_filter
 
 
 class JSONSerializer(ISerializer):
@@ -20,7 +20,7 @@ class JSONSerializer(ISerializer):
         self._registry_lock = Lock()
 
     def serialize(self, cmd: CommandBase) -> bytes:
-        json_str = self.encoder.encode(cmd.to_dict(recursive=True, filter=option_only_filter))
+        json_str = self.encoder.encode(cmd.to_dict(recursive=True, filter=cmd_to_dict_filter))
         return json_str.encode()
 
     def deserialize(self, raw_data: Union[bytes, dict]) -> CommandBase:
@@ -29,7 +29,7 @@ class JSONSerializer(ISerializer):
         if '__cmd_name__' not in raw_data:
             raise ValueError(f'{raw_data} does not contain __cmd_name__')
 
-        cmd_name = raw_data['__cmd_name__']
+        cmd_name = raw_data.pop("__cmd_name__")
         with self._registry_lock:
             if cmd_name not in self._registry:
                 raise RuntimeError(f'command {cmd_name} is not registered')
