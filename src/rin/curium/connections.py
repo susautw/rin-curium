@@ -84,10 +84,6 @@ class RedisConnection(IConnection):
 
     def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
         self.verify_connected()
-        if 'all' in destinations and len(destinations) > 1:
-            warnings.warn(f"Destinations {destinations} has been reduced to ['all']."
-                          f" To eliminate duplicated command", category=RuntimeWarning)
-            destinations = ['all']
         return self._redis.publish('|' + '|'.join(destinations) + '|', data)
 
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:

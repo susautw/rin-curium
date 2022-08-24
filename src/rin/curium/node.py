@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from functools import lru_cache
 from itertools import count
 from threading import Lock, Thread
@@ -60,6 +61,7 @@ class Node:
         self._cmd_contexts_lock = Lock()
         self._cmd_count = count()
 
+        # TODO register default commands
         self.register_cmd(CommandWrapper, self._serializer)
         self.register_cmd(SetResponse)
 
@@ -88,9 +90,6 @@ class Node:
             response_handler: Optional[ResponseHandlerBase[R]] = None,
             response_timeout: float = None
     ) -> ResponseHandlerBase[R]:
-        if isinstance(destinations, str):
-            destinations = [destinations]
-
         cid = self._generate_cid()
         wrapped_cmd = CommandWrapper(nid=self._nid, cid=cid, cmd=cmd)
         rh = self._create_response_handler(response_handler, response_timeout)
@@ -102,6 +101,11 @@ class Node:
     def send_no_response(self, cmd: CommandBase, destinations: Union[str, List[str]]) -> Optional[int]:
         if isinstance(destinations, str):
             destinations = [destinations]
+        if 'all' in destinations and len(destinations) > 1:
+            warnings.warn(f"Destinations {destinations} has been reduced to ['all']."
+                          f" To eliminate duplicated command", category=RuntimeWarning)
+            destinations = ['all']
+        destinations = list(set(destinations))
         return self._connection.send(self._serializer.serialize(cmd), destinations)
 
     @atomicmethod

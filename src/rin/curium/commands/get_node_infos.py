@@ -5,4 +5,4 @@ class GetNodeInfos(CommandBase):
     __cmd_name__ = "get_node_infos"
 
     def execute(self, ctx: Node):
-        return ctx.nid
+        return {'nid': ctx.nid}
