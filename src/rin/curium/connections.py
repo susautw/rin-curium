@@ -35,7 +35,7 @@ class RedisConnection(IConnection):
             self,
             redis: Redis = None,
             namespace: str = "curium",
-            expire: int = 600,
+            expire: int = 120,
             send_timeout: float = None,
             ping_while_sending: bool = True
     ) -> None:
