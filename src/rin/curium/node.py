@@ -1,6 +1,8 @@
 import logging
+import os
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from itertools import count
 from threading import Lock, Thread, Event
@@ -10,7 +12,7 @@ from weakref import WeakValueDictionary
 from fancy import config as cfg
 from redis import Redis
 
-from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer
+from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger
 from .connections import RedisConnection
 from .response_handles import BlockUntilAllReceived
 from .serializers import JSONSerializer
@@ -34,7 +36,7 @@ class Node:
     _check_response_handlers_thread: Thread = None
     _rh_lock: Lock
 
-    _nid: str = None
+    _nid: Optional[str] = None
     _connection: IConnection
 
     _serializer: ISerializer
@@ -71,7 +73,8 @@ class Node:
 
     def connect(self, send_only=False) -> None:
         if self._nid is not None:
-            # TODO warn about connection already connected or closed
+            # TODO reset when close
+            logger.warning("connection already connected or closed")
             return
         self._nid = self._connection.connect()
         self.join(self._nid)
@@ -118,7 +121,9 @@ class Node:
                           f" To eliminate duplicated command", category=RuntimeWarning)
             destinations = ['all']
         destinations = list(set(destinations))
-        return self._connection.send(self._serializer.serialize(cmd), destinations)
+        num_receivers = self._connection.send(self._serializer.serialize(cmd), destinations)
+        logger.info(f"send command: {cmd}")
+        return num_receivers
 
     @atomicmethod
     def _generate_cid(self) -> str:
@@ -175,14 +180,17 @@ class Node:
                 response_str = response_str[:50] + '...'
             logging.warning(f"Received response {response_str}, but command {cid} not found")
 
-    def run_forever(self, sleep=0.5, close_connection=True) -> None:
+    def run_forever(self, sleep=0.5, num_workers=None, close_connection=True) -> None:
         try:
-            while not self._closed_event.wait(0):
-                cmd = self.recv(block=True, timeout=sleep)
-                if cmd is not None:
-                    print("received command:", cmd)  # TODO use logging.info instead
-                    cmd.execute(self)
-            # TODO logging.info connection closed
+            if num_workers is None:
+                num_workers = max(os.cpu_count(), 3)
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                while not self._closed_event.wait(0):
+                    cmd = self.recv(block=True, timeout=sleep)
+                    if cmd is not None:
+                        logger.info(f"received command: {cmd}")
+                        executor.submit(cmd.execute, self)
+                logger.info("connection closed")
         finally:
             if close_connection:
                 self._connection.close()
@@ -222,9 +230,13 @@ class CommandWrapper(CommandBase[NoResponseType]):
     __cmd_name__ = "__cmd_wrapper__"
 
     def execute(self, ctx: Node) -> NoResponseType:
-        response = self.get_cmd(ctx).execute(ctx)
+        cmd = self.get_cmd(ctx)
+        response = cmd.execute(ctx)
         if not isinstance(response, NoResponseType):
-            ctx.send_no_response(SetResponse(cid=self.cid, response=response), self.nid)
+            if self.nid == ctx.nid:
+                ctx.set_response(self.cid, response)
+            else:
+                ctx.send_no_response(SetResponse(cid=self.cid, response=response), self.nid)
         return NoResponse
 
     @lru_cache

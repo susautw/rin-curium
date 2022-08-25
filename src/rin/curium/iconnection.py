@@ -13,8 +13,6 @@ class IConnection(ABC):
     @abstractmethod
     def close(self) -> None: ...
 
-    # TODO is_closed
-
     @abstractmethod
     def join(self, name: str) -> None: ...
 
