@@ -7,7 +7,8 @@ from typing import Optional, List
 from redis import Redis, exceptions
 from redis.client import PubSub
 
-from . import IConnection
+from . import IConnection, logger
+from .utils import atomicmethod
 
 INTERNAL_TIMEOUT = 1
 
@@ -25,19 +26,35 @@ class RedisConnection(IConnection):
 
     _connecting_operation_lock: Lock
 
-    def __init__(self, redis: Redis = None, namespace: str = "curium", expire: int = 600) -> None:
+    _send_timeout: Optional[float]
+    _ping_while_sending: bool
+    _send_ping_event: Event
+    _ping_msg = b"curium-ping"
+
+    def __init__(
+            self,
+            redis: Redis = None,
+            namespace: str = "curium",
+            expire: int = 600,
+            send_timeout: float = None,
+            ping_while_sending: bool = True
+    ) -> None:
         self._redis = Redis() if redis is None else redis
         self._namespace = namespace
         self._expire = expire
         self._pubsub = None
         self._refresh_thread_close = Event()
         self._connecting_operation_lock = Lock()
+        self._send_ping_event = Event()
+        self._send_timeout = send_timeout
+        self._ping_while_sending = ping_while_sending
 
     def connect(self) -> str:
         with self._connecting_operation_lock:
             if self._pubsub is not None:
                 warnings.warn(f"Already connected. uid: {self._uid}", category=RuntimeWarning)
                 return self._uid
+            self._redis.ping()  # check connected
             self._pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
             while True:
                 uid = str(uuid.uuid4())
@@ -53,20 +70,30 @@ class RedisConnection(IConnection):
             return uid
 
     def _refresh_uid(self) -> None:
+        connected = True
         while not self._refresh_thread_close.wait(0):
-            self._redis.setex(self._uid_key, self._expire, 1)
+            try:
+                self._redis.setex(self._uid_key, self._expire, 1)
+                if not connected:
+                    connected = True
+                    logger.warning("Server reconnected")
+            except exceptions.ConnectionError:
+                if connected:
+                    logger.warning("Server disconnected")
+                    connected = False
+
             time.sleep(1)
 
     def close(self) -> None:
         with self._connecting_operation_lock:
-            self.verify_connected()
-            self._pubsub.close()
-            self._pubsub = None
-            self._refresh_thread_close.set()
-            self._refresh_thread.join(timeout=2)
-            self._refresh_thread = None
+            if self._pubsub is not None:
+                self._pubsub.close()
+                self._pubsub = None
+                self._refresh_thread_close.set()
+                self._refresh_thread.join(timeout=2)
+                self._refresh_thread = None
 
-            self._redis.delete(self._uid_key)
+                self._redis.delete(self._uid_key)
 
     def join(self, name: str) -> None:
         self._verify_name(name)
@@ -82,8 +109,15 @@ class RedisConnection(IConnection):
         if "|" in name:
             raise ValueError("character '|' shouldn't appear in channel name")
 
+    @atomicmethod
     def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
         self.verify_connected()
+        if self._ping_while_sending:
+            # ensure connected
+            self._send_ping_event.clear()
+            self._pubsub.ping(self._ping_msg)
+            if not self._send_ping_event.wait(self._send_timeout):
+                raise RuntimeError('Send failed: server no response')
         return self._redis.publish('|' + '|'.join(destinations) + '|', data)
 
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
@@ -101,9 +135,18 @@ class RedisConnection(IConnection):
                 if not block:
                     return None
             else:
-                break
+                if message_pack['type'] == 'pmessage':
+                    break
+                if message_pack['type'] == "pong" and message_pack['data'] == self._ping_msg:
+                    self._send_ping_event.set()
         return message_pack['data']
 
     def verify_connected(self) -> None:
         if self._pubsub is None:
             raise RuntimeError("operation before connect")
+
+    def set_send_time(self, timeout: float = None) -> None:
+        self._send_timeout = timeout
+
+    def set_ping_while_sending(self, val: bool) -> None:
+        self._ping_while_sending = val

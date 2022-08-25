@@ -83,9 +83,11 @@ class Node:
         self._check_response_handlers_thread.start()
 
     def close(self) -> None:
-        self._closed_event.set()
-        self._check_response_handlers_thread.join(timeout=1)
-        self._connection.close()
+        if not self._closed_event.wait(0):
+            self._closed_event.set()
+            if self._check_response_handlers_thread is not None:
+                self._check_response_handlers_thread.join(timeout=1)
+            self._connection.close()
 
     def join(self, name: str) -> None:
         self._connection.join(name)
@@ -182,7 +184,7 @@ class Node:
                     cmd.execute(self)
             # TODO logging.info connection closed
         finally:
-            if close_connection and not self._closed_event.wait(0):
+            if close_connection:
                 self._connection.close()
 
     def _check_response_handlers(self):
