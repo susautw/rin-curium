@@ -3,7 +3,7 @@ import time
 import warnings
 from functools import lru_cache
 from itertools import count
-from threading import Lock, Thread
+from threading import Lock, Thread, Event
 from typing import List, TypeVar, Optional, Type, Any, Dict, Callable, Union
 from weakref import WeakValueDictionary
 
@@ -30,7 +30,8 @@ NoContextSpecified = object()
 
 class Node:
     _sent_cmd_response_handlers: WeakValueDictionary  # weak Dict[str, ResponseHandlerBase]
-    check_response_handlers_interval: float
+    _check_response_handlers_interval: float
+    _check_response_handlers_thread: Thread = None
     _rh_lock: Lock
 
     _nid: str = None
@@ -41,6 +42,8 @@ class Node:
 
     _cmd_contexts: Dict[str, Any]
     _cmd_contexts_lock: Lock
+
+    _closed_event: Event
 
     def __init__(
             self,
@@ -55,8 +58,7 @@ class Node:
         self._serializer = JSONSerializer() if serializer is None else serializer
         self._sent_cmd_response_handlers = WeakValueDictionary()
         self._rh_lock = Lock()
-        self.check_response_handlers_interval = check_response_handlers_interval
-
+        self._check_response_handlers_interval = check_response_handlers_interval
         self._cmd_contexts = {}
         self._cmd_contexts_lock = Lock()
         self._cmd_count = count()
@@ -65,16 +67,24 @@ class Node:
         self.register_cmd(CommandWrapper, self._serializer)
         self.register_cmd(SetResponse)
 
-    def connect(self) -> None:
+        self._closed_event = Event()
+
+    def connect(self, send_only=False) -> None:
         if self._nid is not None:
             # TODO warn about connection already connected or closed
             return
         self._nid = self._connection.connect()
-        Thread(target=self._check_response_handlers, daemon=True).start()
         self.join(self._nid)
-        self.join("all")
+        if not send_only:
+            self.join("all")
+        self._check_response_handlers_thread = Thread(
+            target=self._check_response_handlers, name="response_handler", daemon=True
+        )
+        self._check_response_handlers_thread.start()
 
     def close(self) -> None:
+        self._closed_event.set()
+        self._check_response_handlers_thread.join(timeout=1)
         self._connection.close()
 
     def join(self, name: str) -> None:
@@ -143,17 +153,6 @@ class Node:
         cmd = self._serializer.deserialize(raw_data)
         return cmd
 
-    def run_forever(self, sleep=0.5, close_connection=True) -> None:
-        try:
-            while True:
-                cmd = self.recv(block=True, timeout=sleep)
-                if cmd is not None:
-                    print(cmd)  # TODO use logging.info instead
-                    cmd.execute(self)
-        finally:
-            if close_connection:
-                self._connection.close()
-
     def register_cmd(self, cmd_typ: Type[CommandBase], ctx: Any = NoContextSpecified) -> None:
         with self._cmd_contexts_lock:
             self._serializer.register_cmd(cmd_typ)
@@ -174,13 +173,25 @@ class Node:
                 response_str = response_str[:50] + '...'
             logging.warning(f"Received response {response_str}, but command {cid} not found")
 
+    def run_forever(self, sleep=0.5, close_connection=True) -> None:
+        try:
+            while not self._closed_event.wait(0):
+                cmd = self.recv(block=True, timeout=sleep)
+                if cmd is not None:
+                    print("received command:", cmd)  # TODO use logging.info instead
+                    cmd.execute(self)
+            # TODO logging.info connection closed
+        finally:
+            if close_connection and not self._closed_event.wait(0):
+                self._connection.close()
+
     def _check_response_handlers(self):
-        while True:
+        while not self._closed_event.wait(0):
             with self._rh_lock:
                 rhs = self._sent_cmd_response_handlers.copy()
             for rh in rhs.values():
                 rh.finalize()
-            time.sleep(self.check_response_handlers_interval)
+            time.sleep(self._check_response_handlers_interval)
 
     @property
     def nid(self) -> str:

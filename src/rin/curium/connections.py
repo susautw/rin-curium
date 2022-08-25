@@ -4,7 +4,7 @@ import warnings
 from threading import Thread, Event, Lock
 from typing import Optional, List
 
-from redis import Redis
+from redis import Redis, exceptions
 from redis.client import PubSub
 
 from . import IConnection
@@ -45,7 +45,7 @@ class RedisConnection(IConnection):
                 uid_code, _ = self._redis.pipeline().incr(uid_key).expire(uid_key, self._expire, nx=True).execute()
                 if uid_code == 1:
                     break
-            self._refresh_thread = Thread(target=self._refresh_uid, daemon=True)
+            self._refresh_thread = Thread(target=self._refresh_uid, name="refresh_uid", daemon=True)
             self._refresh_thread_close.clear()
             self._uid_key = uid_key
             self._uid = uid
@@ -88,22 +88,17 @@ class RedisConnection(IConnection):
 
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
         self.verify_connected()
-        if block:
-            if timeout is None:
-                internal_timeout = INTERNAL_TIMEOUT
-            else:
-                internal_timeout = timeout
-        else:
-            internal_timeout = 0
+        if not block:
             timeout = 0
-
         while True:
-            message_pack = self._pubsub.get_message(
-                ignore_subscribe_messages=True,
-                timeout=internal_timeout
-            )
+            try:
+                message_pack = self._pubsub.handle_message(
+                    self._pubsub.parse_response(False, timeout)
+                )
+            except exceptions.ConnectionError:  # connection may close while blocking
+                return None
             if message_pack is None:
-                if timeout is not None:
+                if not block:
                     return None
             else:
                 break

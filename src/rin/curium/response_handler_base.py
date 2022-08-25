@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from threading import Event, Lock
-from typing import Generic, TypeVar, List, Tuple, final, Optional
+from typing import Generic, TypeVar, List, final, Optional
 
 T = TypeVar("T")
 
@@ -40,9 +40,8 @@ class ResponseHandlerBase(Generic[T], ABC):
     def finalize_internal(self) -> bool: ...
 
     @final
-    def get(self, block=True, timeout=None) -> Tuple[bool, T]:
+    def get(self, block=True, timeout=None) -> List[T]:
         if block:
-            ret = self._finalized.wait(timeout)
-        else:
-            ret = self._finalized.is_set()
-        return ret, self._results
+            self._finalized.wait(timeout)
+        with self._results_lock:
+            return self._results
