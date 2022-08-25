@@ -137,6 +137,14 @@ class Node:
         with self._rh_lock:
             self._sent_cmd_response_handlers[cid] = rh
 
+    def _remove_response_handler(self, cid: str, silent=False) -> None:
+        with self._rh_lock:
+            try:
+                del self._sent_cmd_response_handlers[cid]
+            except KeyError:
+                if not silent:
+                    raise
+
     def _create_response_handler(
             self,
             response_handler: Optional[ResponseHandlerBase[R]],
@@ -199,8 +207,9 @@ class Node:
         while not self._closed_event.wait(0):
             with self._rh_lock:
                 rhs = self._sent_cmd_response_handlers.copy()
-            for rh in rhs.values():
-                rh.finalize()
+            for cid, rh in rhs.items():
+                if rh.finalize():
+                    self._remove_response_handler(cid, silent=True)
             time.sleep(self._check_response_handlers_interval)
 
     @property

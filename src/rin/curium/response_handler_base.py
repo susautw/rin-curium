@@ -37,7 +37,8 @@ class ResponseHandlerBase(Generic[T], ABC):
         return False
 
     @abstractmethod
-    def finalize_internal(self) -> bool: ...
+    def finalize_internal(self) -> bool:
+        ...
 
     @final
     def get(self, block=True, timeout=None) -> List[T]:
@@ -45,3 +46,7 @@ class ResponseHandlerBase(Generic[T], ABC):
             self._finalized.wait(timeout)
         with self._results_lock:
             return self._results
+
+    @property
+    def is_finalized(self) -> bool:
+        return self._finalized.wait(0)
