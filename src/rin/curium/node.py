@@ -64,12 +64,17 @@ class Node:
         self._cmd_contexts = {}
         self._cmd_contexts_lock = Lock()
         self._cmd_count = count()
+        self._closed_event = Event()
 
-        # TODO register default commands
+        self._register_default_commands()
+
+    def _register_default_commands(self) -> None:
+        from .commands import default_commands
         self.register_cmd(CommandWrapper, self._serializer)
         self.register_cmd(SetResponse)
 
-        self._closed_event = Event()
+        for command_args in default_commands:
+            self.register_cmd(*command_args)
 
     def connect(self, send_only=False) -> None:
         if self._nid is not None:
