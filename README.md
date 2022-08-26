@@ -1,1 +1,4 @@
-# python-template
+# rin-curium
+
+## TODO
+- exceptions

@@ -221,6 +221,11 @@ class Node:
     def nid(self) -> str:
         return self._nid
 
+    @property
+    def num_response_handlers(self) -> int:
+        with self._rh_lock:
+            return len(self._sent_cmd_response_handlers)
+
     def __del__(self) -> None:
         try:
             self._connection.close()

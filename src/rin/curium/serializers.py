@@ -38,4 +38,8 @@ class JSONSerializer(ISerializer):
 
     def register_cmd(self, cmd_type: Type[CommandBase]):
         with self._registry_lock:
+            if cmd_type.__cmd_name__ in self._registry and \
+                    cmd_type is not self._registry[cmd_type.__cmd_name__]:
+                raise RuntimeError(f"Register command {cmd_type} using a duplicated name "
+                                   f"with command {self._registry[cmd_type.__cmd_name__]}'s name")
             self._registry[cmd_type.__cmd_name__] = cmd_type
