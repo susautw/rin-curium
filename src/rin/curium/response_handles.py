@@ -1,6 +1,6 @@
 import time
 import warnings
-from typing import TypeVar, Callable, Any
+from typing import TypeVar
 
 from . import ResponseHandlerBase
 
@@ -27,22 +27,12 @@ class BlockUntilAllReceived(ResponseHandlerBase[T]):
         )
 
 
-class Callback(BlockUntilAllReceived[T]):
-    def __init__(self, callback: Callable[[Any], None], timeout: float = None):
-        super().__init__(timeout)
-        self.callback = callback
-
-    def set_response(self, response: T) -> None:
-        super().set_response(response)
-        self.callback(response)
-
-
 class UpdateTimeoutPerReceive(BlockUntilAllReceived[T]):
 
     def __init__(self, timeout: float):
         super().__init__(timeout)
         self.timeout = timeout
 
-    def set_response(self, response: T) -> None:
-        super().set_response(response)
+    def add_response(self, response: T) -> None:
+        super().add_response(response)
         self.timeout_at = time.time() + self.timeout

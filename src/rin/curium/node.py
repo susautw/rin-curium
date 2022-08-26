@@ -186,7 +186,7 @@ class Node:
     def add_response(self, cid: str, response: Any) -> None:
         rh = self._get_response_handler_by_cid(cid)
         if rh is not None:
-            rh.set_response(response)
+            rh.add_response(response)
         else:
             response_str = f'{response}'
             if len(response_str) > 50:
