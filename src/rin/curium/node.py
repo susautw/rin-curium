@@ -71,7 +71,7 @@ class Node:
     def _register_default_commands(self) -> None:
         from .commands import default_commands
         self.register_cmd(CommandWrapper, self._serializer)
-        self.register_cmd(SetResponse)
+        self.register_cmd(AddResponse)
 
         for command_args in default_commands:
             self.register_cmd(*command_args)
@@ -183,7 +183,7 @@ class Node:
         with self._cmd_contexts_lock:
             return self._cmd_contexts[name]
 
-    def set_response(self, cid: str, response: Any) -> None:
+    def add_response(self, cid: str, response: Any) -> None:
         rh = self._get_response_handler_by_cid(cid)
         if rh is not None:
             rh.set_response(response)
@@ -253,9 +253,9 @@ class CommandWrapper(CommandBase[NoResponseType]):
         response = cmd.execute(ctx)
         if not isinstance(response, NoResponseType):
             if self.nid == ctx.nid:
-                ctx.set_response(self.cid, response)
+                ctx.add_response(self.cid, response)
             else:
-                ctx.send_no_response(SetResponse(cid=self.cid, response=response), self.nid)
+                ctx.send_no_response(AddResponse(cid=self.cid, response=response), self.nid)
         return NoResponse
 
     @lru_cache
@@ -275,12 +275,12 @@ class CommandWrapper(CommandBase[NoResponseType]):
         return super().to_dict(recursive=False, prevent_circular=True, filter=filter)
 
 
-class SetResponse(CommandBase[NoResponseType]):
+class AddResponse(CommandBase[NoResponseType]):
     cid: str = cfg.Option(required=True, type=str)
     response: Any = cfg.Option(required=True)
 
-    __cmd_name__ = '__cmd_set_response__'
+    __cmd_name__ = '__cmd_add_response__'
 
     def execute(self, ctx: Node) -> NoResponseType:
-        ctx.set_response(self.cid, self.response)
+        ctx.add_response(self.cid, self.response)
         return NoResponse

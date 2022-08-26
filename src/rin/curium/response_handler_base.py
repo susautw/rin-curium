@@ -41,9 +41,11 @@ class ResponseHandlerBase(Generic[T], ABC):
         ...
 
     @final
-    def get(self, block=True, timeout=None) -> List[T]:
-        if block:
-            self._finalized.wait(timeout)
+    def get(self, block=True, timeout=None) -> Optional[List[T]]:
+        if not block:
+            timeout = 0
+        if not self._finalized.wait(timeout):
+            return None
         with self._results_lock:
             return self._results
 
