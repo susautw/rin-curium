@@ -15,15 +15,15 @@ class ResponseHandlerBase(Iterator[T], ABC):
     _results_lock: Lock
     _finalized: Event
     _iter_semaphore: Semaphore
-    _iter_timeout: float
+    _iter_acquire_timeout: float
 
     _is_next_executed: Event
 
-    def __init__(self, iter_timeout=0.01):
+    def __init__(self, iter_acquire_timeout=None):
         self._results = deque()
         self._num_received_results = 0
         self._iter_semaphore = Semaphore(value=0)
-        self._iter_timeout = iter_timeout
+        self._iter_acquire_timeout = 0.01 if iter_acquire_timeout is None else iter_acquire_timeout
         self._results_lock = Lock()
         self._finalized = Event()
         self._is_next_executed = Event()
@@ -67,7 +67,7 @@ class ResponseHandlerBase(Iterator[T], ABC):
     def __next__(self) -> T:
         self._is_next_executed.set()
         self.__should_stop_iteration()
-        while not self._iter_semaphore.acquire(timeout=self._iter_timeout):
+        while not self._iter_semaphore.acquire(timeout=self._iter_acquire_timeout):
             self.__should_stop_iteration()
         with self._results_lock:
             return self._results.popleft()

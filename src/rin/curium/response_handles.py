@@ -8,10 +8,10 @@ T = TypeVar("T")
 
 
 class BlockUntilAllReceived(ResponseHandlerBase[T]):
-    def __init__(self, timeout: float = None):
+    def __init__(self, timeout: float = None, iter_acquire_timeout=None):
         if timeout is None:
             warnings.warn("No timeout specified may cause thread blocking forever", category=RuntimeWarning)
-        super().__init__()
+        super().__init__(iter_acquire_timeout)
         self.timeout_at = timeout
         if timeout is not None:
             self.timeout_at += time.time()
@@ -29,8 +29,8 @@ class BlockUntilAllReceived(ResponseHandlerBase[T]):
 
 class UpdateTimeoutPerReceive(BlockUntilAllReceived[T]):
 
-    def __init__(self, timeout: float):
-        super().__init__(timeout)
+    def __init__(self, timeout: float, iter_acquire_timeout=None):
+        super().__init__(timeout, iter_acquire_timeout)
         self.timeout = timeout
 
     def add_response(self, response: T) -> None:
