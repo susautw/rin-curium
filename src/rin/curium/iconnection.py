@@ -15,7 +15,7 @@ class IConnection(ABC):
     @abstractmethod
     def reconnect(self) -> None:
         """
-        Try reconnect to the backend server using same unique id was got previously.
+        Try to reconnect to the backend server using the unique id that was got previously.
         :raises exc.ConnectionFailed: fail to reconnect
         :raises exc.NotConnectedError: no previous connection found.
         """
