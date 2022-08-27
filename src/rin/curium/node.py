@@ -12,7 +12,7 @@ from weakref import WeakValueDictionary
 from fancy import config as cfg
 from redis import Redis
 
-from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger
+from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc
 from .connections import RedisConnection
 from .response_handles import BlockUntilAllReceived
 from .serializers import JSONSerializer
@@ -78,7 +78,6 @@ class Node:
 
     def connect(self, send_only=False) -> None:
         if self._nid is not None:
-            # TODO reset when close
             logger.warning("connection already connected or closed")
             return
         self._nid = self._connection.connect()
@@ -193,20 +192,46 @@ class Node:
                 response_str = response_str[:50] + '...'
             logging.warning(f"Received response {response_str}, but command {cid} not found")
 
-    def run_forever(self, sleep=0.5, num_workers=None, close_connection=True) -> None:
+    def run_forever(
+            self,
+            sleep: float = 0.5,
+            num_workers: int = None,
+            close_when_exit: bool = True,
+            reconnect_max_tries: int = 10,
+            reconnect_interval: float = 10
+    ) -> None:
         try:
             if num_workers is None:
                 num_workers = max(os.cpu_count(), 3)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 while not self._closed_event.wait(0):
-                    cmd = self.recv(block=True, timeout=sleep)
-                    if cmd is not None:
-                        logger.info(f"received command: {cmd}")
-                        executor.submit(cmd.execute, self)
+                    try:
+                        cmd = self.recv(block=True, timeout=sleep)
+                        if cmd is not None:
+                            logger.info(f"received command: {cmd}")
+                            # TODO handle error occurred in submitted command execution
+                            executor.submit(cmd.execute, self)
+                    except exc.ServerDisconnectedError:
+                        if self._closed_event.wait(0):  # connection closed while blocking
+                            break
+                        self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
+
                 logger.info("connection closed")
         finally:
-            if close_connection:
-                self._connection.close()
+            if close_when_exit:
+                self.close()
+
+    def __reconnect_to_backend(self, reconnect_max_tries: int, reconnect_interval: float):
+        last_err = None
+        for i in range(reconnect_max_tries):
+            try:
+                logger.warning(f"Reconnecting to the backend server: {i}")
+                self._connection.reconnect()
+                logger.warning(f"Server reconnected")
+                return
+            except exc.ConnectionFailed as last_err:
+                time.sleep(reconnect_interval)
+        raise exc.ConnectionFailed(last_err)
 
     def _check_response_handlers(self):
         while not self._closed_event.wait(0):
@@ -228,7 +253,7 @@ class Node:
 
     def __del__(self) -> None:
         try:
-            self._connection.close()
+            self.close()
         except RuntimeError:
             pass
 

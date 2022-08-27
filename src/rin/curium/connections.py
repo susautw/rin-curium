@@ -7,8 +7,8 @@ from typing import Optional, List
 from redis import Redis, exceptions
 from redis.client import PubSub
 
-from . import IConnection, logger
-from .utils import atomicmethod
+from . import IConnection, logger, exc
+from .utils import atomicmethod, add_error_handler
 
 INTERNAL_TIMEOUT = 1
 
@@ -49,6 +49,7 @@ class RedisConnection(IConnection):
         self._send_timeout = send_timeout
         self._ping_while_sending = ping_while_sending
 
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailed)
     def connect(self) -> str:
         with self._connecting_operation_lock:
             if self._pubsub is not None:
@@ -69,6 +70,11 @@ class RedisConnection(IConnection):
             self._refresh_thread.start()
             return uid
 
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailed)
+    def reconnect(self) -> None:
+        self.verify_connected()
+        self._redis.set(self._uid_key, 1, get=True, ex=self._expire)
+
     def _refresh_uid(self) -> None:
         connected = True
         while not self._refresh_thread_close.wait(0):
@@ -84,6 +90,7 @@ class RedisConnection(IConnection):
 
             time.sleep(1)
 
+    @add_error_handler(exceptions.ConnectionError, suppress=True)
     def close(self) -> None:
         with self._connecting_operation_lock:
             if self._pubsub is not None:
@@ -95,42 +102,46 @@ class RedisConnection(IConnection):
 
                 self._redis.delete(self._uid_key)
 
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def join(self, name: str) -> None:
         self._verify_name(name)
         self.verify_connected()
         self._pubsub.psubscribe(f"*|{name}|*")
 
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def leave(self, name: str) -> None:
         self._verify_name(name)
         self.verify_connected()
         self._pubsub.punsubscribe(f"*|{name}|*")
 
-    def _verify_name(self, name: str) -> None:
-        if "|" in name:
-            raise ValueError("character '|' shouldn't appear in channel name")
-
     @atomicmethod
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
+        for channel_name in destinations:
+            self._verify_name(channel_name)
         self.verify_connected()
         if self._ping_while_sending:
             # ensure connected
             self._send_ping_event.clear()
             self._pubsub.ping(self._ping_msg)
             if not self._send_ping_event.wait(self._send_timeout):
-                raise RuntimeError('Send failed: server no response')
+                raise exc.ServerDisconnectedError()
         return self._redis.publish('|' + '|'.join(destinations) + '|', data)
 
+    def _verify_name(self, name: str) -> None:
+        if "|" in name:
+            raise exc.InvalidChannelError("character '|' shouldn't appear in channel name")
+
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
         self.verify_connected()
         if not block:
             timeout = 0
         while True:
-            try:
-                message_pack = self._pubsub.handle_message(
-                    self._pubsub.parse_response(False, timeout)
-                )
-            except exceptions.ConnectionError:  # connection may close while blocking
-                return None
+            message_pack = self._pubsub.handle_message(
+                self._pubsub.parse_response(False, timeout)
+            )
+
             if message_pack is None:
                 if not block:
                     return None
@@ -143,7 +154,7 @@ class RedisConnection(IConnection):
 
     def verify_connected(self) -> None:
         if self._pubsub is None:
-            raise RuntimeError("operation before connect")
+            raise exc.NotConnectedError("operation before connect")
 
     def set_send_time(self, timeout: float = None) -> None:
         self._send_timeout = timeout

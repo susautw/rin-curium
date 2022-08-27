@@ -4,7 +4,7 @@ from weakref import WeakKeyDictionary
 from fancy import config as cfg
 
 from threading import Lock, RLock
-from typing import Callable
+from typing import Callable, Type
 
 
 class Atomic:
@@ -112,3 +112,38 @@ class atomicmethod:
 
 def cmd_to_dict_filter(p: cfg.PlaceHolder) -> bool:
     return isinstance(p, cfg.Option) or p.name == "__cmd_name__"
+
+
+def add_error_handler(
+        error_typ, *,
+        reraise_by: Type[Exception] = None,
+        suppress: bool = None,
+        custom: Callable[[Exception], None] = None
+):
+    argn = 0
+    for name, h in [("reraise_by", reraise_by), ("suppress", suppress), ("custom", custom)]:
+        if h is not None:
+            handler = name
+            argn += 1
+    if argn == 0:
+        raise RuntimeError("No error handler specified")
+    if argn > 1:
+        raise RuntimeError("More one error handlers specified")
+
+    def _decorator(fn):
+        @functools.wraps(fn)
+        def _wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except error_typ as e:
+                if handler == "reraise_by":
+                    raise reraise_by(e)
+                elif handler == "suppress":
+                    if not suppress:
+                        raise
+                else:
+                    custom(e)
+
+        return _wrapper
+
+    return _decorator
