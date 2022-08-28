@@ -98,6 +98,8 @@ class Node:
     def close(self) -> None:
         """
         Disconnect from the the backend server then terminate threads started by this node.
+
+        NOTICE: A Node cannot reuse after close
         """
         if not self._closed_event.wait(0):
             self._closed_event.set()
@@ -108,6 +110,7 @@ class Node:
     def join(self, name: str) -> None:
         """
         Join a channel with the given name.
+
         :param name: channel name
         :raises exc.NotConnectedError: the backend server is not connected.
         :raises exc.InvalidChannelError: channel is not available.
@@ -118,6 +121,7 @@ class Node:
     def leave(self, name: str) -> None:
         """
         Leave a channel with the given name.
+
         :param name: channel name
         :raises exc.NotConnectedError: the backend server is not connected.
         :raises exc.InvalidChannelError: channel is not available.
@@ -134,8 +138,10 @@ class Node:
     ) -> ResponseHandlerBase[R]:
         """
         Send command to the given destinations.
+
         NOTICE: This method is intended to get responses from destination nodes.
                  Any command sent by this method will be wrapped by CommandWrapper to handle the response.
+
         :param cmd: command to be sent
         :param destinations: list of channel names represent destinations
         :param response_handler: a response handler
@@ -158,6 +164,7 @@ class Node:
     def send_no_response(self, cmd: CommandBase, destinations: Union[str, List[str]]) -> Optional[int]:
         """
         Send command to the given destinations without wrapping the command.
+
         :param cmd: command to be sent
         :param destinations: list of channel names represent destinations
         :return: numeral of received, None presents unknown
@@ -329,7 +336,6 @@ class Node:
 
     @property
     def num_response_handlers(self) -> int:
-        # TODO doc this method
         with self._rh_lock:
             return len(self._sent_cmd_response_handlers)
 

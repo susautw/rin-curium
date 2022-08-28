@@ -9,6 +9,7 @@ class ISerializer(ABC):
     def serialize(self, cmd: CommandBase) -> bytes:
         """
         Serialize command into bytes.
+
         :param cmd: command to be serialized
         :return: raw bytes in bytes
         :raises exc.UnsupportedObjectError: unsupported objects appear in the command object
@@ -18,6 +19,7 @@ class ISerializer(ABC):
     def deserialize(self, raw_data: Union[bytes, dict]) -> CommandBase:
         """
         Deserialize raw data to command.
+
         :param raw_data: raw data to be deserialized
         :return: a command object
         :raises exc.InvalidFormatError: unrecognized raw data found while deserializing
@@ -28,6 +30,7 @@ class ISerializer(ABC):
     def register_cmd(self, cmd_type: Type[CommandBase]) -> None:
         """
         Register a command for deserialization.
+
         :param cmd_type: a command class
         :raises exc.CommandHasRegisteredError: registering a command that has registered
         """
