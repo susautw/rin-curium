@@ -9,14 +9,14 @@ class IConnection(ABC):
         """
         Connect to the backend server.
         :return: A unique id for node
-        :raises exc.ConnectionFailed: fail to connect.
+        :raises exc.ConnectionFailedError: fail to connect.
         """
 
     @abstractmethod
     def reconnect(self) -> None:
         """
         Try to reconnect to the backend server using the unique id that was got previously.
-        :raises exc.ConnectionFailed: fail to reconnect
+        :raises exc.ConnectionFailedError: fail to reconnect
         :raises exc.NotConnectedError: no previous connection found.
         """
 
@@ -52,7 +52,7 @@ class IConnection(ABC):
         """
         Send data to given destinations on the backend server.
         :param data: data to be sent
-        :param destinations: list of names present destinations
+        :param destinations: list of channel names represent destinations
         :return: number of node that received, None presents unknown
         :raises exc.InvalidChannelError: channel is not available.
         :raises exc.NotConnectedError: the backend server is not connected.

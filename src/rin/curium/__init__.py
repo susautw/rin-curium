@@ -4,3 +4,4 @@ from .iconnection import IConnection
 from .command_base import CommandBase
 from .iserializer import ISerializer
 from .node import Node
+from .connections import RedisConnection

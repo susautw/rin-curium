@@ -10,8 +10,6 @@ from redis.client import PubSub
 from . import IConnection, logger, exc
 from .utils import atomicmethod, add_error_handler
 
-INTERNAL_TIMEOUT = 1
-
 
 class RedisConnection(IConnection):
     _redis: Redis
@@ -49,11 +47,11 @@ class RedisConnection(IConnection):
         self._send_timeout = send_timeout
         self._ping_while_sending = ping_while_sending
 
-    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailed)
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailedError)
     def connect(self) -> str:
         with self._connecting_operation_lock:
             if self._pubsub is not None:
-                warnings.warn(f"Already connected. uid: {self._uid}", category=RuntimeWarning)
+                warnings.warn(f"Already connected. uid: {self._uid}", category=RuntimeWarning, stacklevel=2)
                 return self._uid
             self._redis.ping()  # check connected
             self._pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
@@ -70,7 +68,7 @@ class RedisConnection(IConnection):
             self._refresh_thread.start()
             return uid
 
-    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailed)
+    @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailedError)
     def reconnect(self) -> None:
         self.verify_connected()
         self._redis.set(self._uid_key, 1, get=True, ex=self._expire)
@@ -130,7 +128,7 @@ class RedisConnection(IConnection):
 
     def _verify_name(self, name: str) -> None:
         if "|" in name:
-            raise exc.InvalidChannelError("character '|' shouldn't appear in channel name")
+            raise exc.InvalidChannelError(f"character '|' shouldn't appear in channel name: {name}")
 
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
