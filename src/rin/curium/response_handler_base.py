@@ -34,13 +34,13 @@ class ResponseHandlerBase(Iterator[T], ABC):
             self._iter_semaphore.release()
             self._num_received_results += 1
 
+    def set_num_receivers(self, num_receivers: Optional[int]) -> None:
+        self.num_receivers = num_receivers
+
     @property
     def num_received_results(self) -> int:
         with self._results_lock:
             return self._num_received_results
-
-    def set_num_receivers(self, num_receivers: Optional[int]) -> None:
-        self.num_receivers = num_receivers
 
     @final
     def finalize(self) -> bool:
@@ -48,6 +48,10 @@ class ResponseHandlerBase(Iterator[T], ABC):
             self._finalized.set()
             return True
         return False
+
+    @property
+    def is_finalized(self) -> bool:
+        return self._finalized.wait(0)
 
     @abstractmethod
     def finalize_internal(self) -> bool:
@@ -77,10 +81,6 @@ class ResponseHandlerBase(Iterator[T], ABC):
             num_results = len(self._results)
         if self.is_finalized and num_results == 0:
             raise StopIteration()
-
-    @property
-    def is_finalized(self) -> bool:
-        return self._finalized.wait(0)
 
     def __warn_may_get_unexpected_results(self) -> None:
         warnings.warn("method get may get unexpected results because __next__ has been called. "

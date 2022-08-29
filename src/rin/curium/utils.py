@@ -9,7 +9,7 @@ from typing import Callable, Type
 
 class Atomic:
     """
-    A descriptor makes applied variable atomic
+    A descriptor converts an attribute's accession and deletion to atomic operations
     """
     _lock_var_suffix = "_lock"
     _default_factory: Callable
@@ -64,7 +64,7 @@ class Atomic:
 
 
 def atomicfunction(fn):
-    """ Make a function to be an atomic operation"""
+    """ Convert a function to an atomic operation """
     lock = RLock()
 
     @functools.wraps(fn)
@@ -76,6 +76,7 @@ def atomicfunction(fn):
 
 
 class atomicmethod:
+    """ A descriptor converts a method to an atomic operation """
     def __init__(self, method):
         self._method = method
         self._instance_fn_map = WeakKeyDictionary()
@@ -111,6 +112,7 @@ class atomicmethod:
 
 
 def cmd_to_dict_filter(p: cfg.PlaceHolder) -> bool:
+    """ A filter used in the command to dictionary conversion """
     return isinstance(p, cfg.Option) or p.name == "__cmd_name__"
 
 
@@ -120,6 +122,18 @@ def add_error_handler(
         suppress: bool = None,
         custom: Callable[[Exception], None] = None
 ):
+    """
+    An decorator factory catches an exception and handle it by given handler.
+
+    .. warning:: You can only specify one handler.
+     If you specify multiple handlers, :exc:`ValueError` will be raised.
+
+    :param error_typ: type of exception to be handled
+    :param reraise_by: type of exception used to re-raise the caught exception
+    :param suppress: is or not suppress the caught exception
+    :param custom: a custom :data:`~typing.Callable` to handle the caught exception
+    :return: a decorator
+    """
     argn = 0
     for name, h in [("reraise_by", reraise_by), ("suppress", suppress), ("custom", custom)]:
         if h is not None:
@@ -152,6 +166,8 @@ def add_error_handler(
 class Flag:
     """
     This class represents a flag that can make some choices.
+
+    .. note:: This class is for documentation purposes.
     """
     def __init__(self, name: str = None):
         self.name = name

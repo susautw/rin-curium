@@ -7,10 +7,10 @@ Welcome to rin-curium's documentation!
 ======================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
-   references/index
+   references
 
 
 

@@ -15,7 +15,7 @@ from redis import Redis
 
 from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc
 from .connections import RedisConnection
-from .response_handles import BlockUntilAllReceived
+from .response_handlers import BlockUntilAllReceived
 from .serializers import JSONSerializer
 from .utils import cmd_to_dict_filter, atomicmethod, Flag
 
@@ -142,14 +142,14 @@ class Node:
         Send command to the given destinations.
 
         .. note:: This method is intended to get responses from destination nodes.
-           Any command sent by this method will be wrapped by CommandWrapper to handle the response.
+           Any command sent by this method will be wrapped by :class:`CommandWrapper` to handle the response.
 
         :param cmd: command to be sent
-        :param destinations: list of channel names represent destinations
+        :param destinations: list of channel names represent `destinations`
         :param response_handler: a response handler
-        :param response_timeout: automatically create a response handler with the given response_timeout
-        :return: A ResponseHandlerBase to get results
-        :raises ValueError: both response_handler and response_timeout are specified.
+        :param response_timeout: automatically create a response handler with the given `response_timeout`
+        :return: A :class:`.ResponseHandlerBase` to get results
+        :raises ValueError: both `response_handler` and `response_timeout` are specified.
         :raises ~exc.InvalidChannelError: channel is not available.
         :raises ~exc.NotConnectedError: the backend server is not connected.
         :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
@@ -223,7 +223,7 @@ class Node:
 
         :param block: is blocking or not
         :param timeout: timeout of this operation
-        :return: ICommand or None, None present no command received
+        :return: :class:`.CommandBase` or ``None``, ``None`` present no command received
         :raises ~exc.NotConnectedError: the backend server is not connected.
         :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         :raises ~exc.InvalidFormatError: unrecognized raw data found while deserializing
@@ -239,8 +239,8 @@ class Node:
         """
         Register a command
 
-        :param cmd_typ: a command class
-        :param ctx: context for command execution. :py:data:`NoContextSpecified` presents no context specified.
+        :param cmd_typ: a class based on :class:`.CommandBase`
+        :param ctx: context for command execution. :data:`NoContextSpecified` presents no context specified.
         :raises ~exc.CommandHasRegisteredError: registering a command that has registered
         """
         with self._cmd_contexts_lock:
@@ -303,9 +303,9 @@ class Node:
 
         :param sleep: max waiting time for a command
         :param num_workers: max number of workers for the internal
-           :py:class:`~concurrent.futures.ThreadPoolExecutor`
+           :class:`~concurrent.futures.ThreadPoolExecutor`
         :param close_when_exit: close this node when this method has exited in
-           any situation. For example, a :py:exc:`KeyboardInterrupt` has been
+           any situation. For example, a :exc:`KeyboardInterrupt` has been
            raised.
         :param reconnect_max_tries: the max number of times to reconnect
         :param reconnect_interval: the interval between reconnects
