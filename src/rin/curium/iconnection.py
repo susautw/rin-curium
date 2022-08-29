@@ -10,7 +10,7 @@ class IConnection(ABC):
         Connect to the backend server.
 
         :return: A unique id for node
-        :raises exc.ConnectionFailedError: fail to connect.
+        :raises ~exc.ConnectionFailedError: fail to connect.
         """
 
     @abstractmethod
@@ -18,8 +18,8 @@ class IConnection(ABC):
         """
         Try to reconnect to the backend server using the unique id that was got previously.
 
-        :raises exc.ConnectionFailedError: fail to reconnect
-        :raises exc.NotConnectedError: no previous connection found.
+        :raises ~exc.ConnectionFailedError: fail to reconnect
+        :raises ~exc.NotConnectedError: no previous connection found.
         """
 
     @abstractmethod
@@ -27,7 +27,7 @@ class IConnection(ABC):
         """
         Disconnect from the backend server and clean up internal state.
 
-        NOTE: No reaction when you invoke this method and the server was not connected.
+        .. note:: No reaction when you invoke this method and the server was not connected.
         """
 
     @abstractmethod
@@ -36,9 +36,9 @@ class IConnection(ABC):
         Join a channel with the given name.
 
         :param name: channel name
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """
 
     @abstractmethod
@@ -47,9 +47,9 @@ class IConnection(ABC):
         Leave a channel with the given name.
 
         :param name: channel name
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """
 
     @abstractmethod
@@ -60,9 +60,9 @@ class IConnection(ABC):
         :param data: data to be sent
         :param destinations: list of channel names represent destinations
         :return: number of node that received, None presents unknown
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """
 
     @abstractmethod
@@ -74,6 +74,6 @@ class IConnection(ABC):
         :param timeout: timeout of this operation in second, None presents forever
         :return: received data.
                  None presents no data received
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """

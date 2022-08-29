@@ -30,4 +30,11 @@ class CommandBase(cfg.BaseConfig, Generic[T], ABC):
         cls.__cmd_name_option__ = __cmd_name_option__
 
     @abstractmethod
-    def execute(self, ctx: "Node") -> T: ...
+    def execute(self, ctx: "Node") -> T:
+        """
+        Execute this command.
+
+        :param ctx: A Node that received this command.
+        :return: result of this execution. :py:data:`~.NoResponse`
+         represents this execution doesn't have response.
+        """

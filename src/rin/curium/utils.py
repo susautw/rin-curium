@@ -147,3 +147,16 @@ def add_error_handler(
         return _wrapper
 
     return _decorator
+
+
+class Flag:
+    """
+    This class represents a flag that can make some choices.
+    """
+    def __init__(self, name: str = None):
+        self.name = name
+
+    def __str__(self):
+        return self.name or self.__class__.__name__
+
+    __repr__ = __str__

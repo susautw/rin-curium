@@ -3,6 +3,7 @@ import os
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from functools import lru_cache
 from itertools import count
 from threading import Lock, Thread, Event
@@ -16,18 +17,19 @@ from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger
 from .connections import RedisConnection
 from .response_handles import BlockUntilAllReceived
 from .serializers import JSONSerializer
-from .utils import cmd_to_dict_filter, atomicmethod
+from .utils import cmd_to_dict_filter, atomicmethod, Flag
 
 R = TypeVar("R")
 
 
-class NoResponseType:
-    pass
+class NoResponseType(Flag):
+    def __init__(self):
+        super().__init__()
 
 
-NoResponse = NoResponseType()
+NoResponse = NoResponseType()  #: Represents there is no response returned from a command
 
-NoContextSpecified = object()
+NoContextSpecified = Flag("NoContextSpecified")  #: Represents no context specified while registering a command
 
 
 class Node:
@@ -78,10 +80,10 @@ class Node:
 
     def connect(self, send_only=False) -> None:
         """
-        Connect to the backend server, join "own" and "all" channels, then start to check response handlers.
+        Connect to the backend server, join ``own`` and ``all`` channels, then start to check response handlers.
 
         :param send_only: don't join the "all" channel.
-        :raises exc.ConnectionFailedError: fail to connect.
+        :raises ~exc.ConnectionFailedError: fail to connect.
         """
         if self._nid is not None:
             logger.warning("connection already connected or closed")
@@ -99,7 +101,7 @@ class Node:
         """
         Disconnect from the the backend server then terminate threads started by this node.
 
-        NOTICE: A Node cannot reuse after close
+        .. warning:: A node cannot reuse after close
         """
         if not self._closed_event.wait(0):
             self._closed_event.set()
@@ -112,9 +114,9 @@ class Node:
         Join a channel with the given name.
 
         :param name: channel name
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """
         self._connection.join(name)
 
@@ -123,9 +125,9 @@ class Node:
         Leave a channel with the given name.
 
         :param name: channel name
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
         """
         self._connection.leave(name)
 
@@ -139,8 +141,8 @@ class Node:
         """
         Send command to the given destinations.
 
-        NOTICE: This method is intended to get responses from destination nodes.
-                 Any command sent by this method will be wrapped by CommandWrapper to handle the response.
+        .. note:: This method is intended to get responses from destination nodes.
+           Any command sent by this method will be wrapped by CommandWrapper to handle the response.
 
         :param cmd: command to be sent
         :param destinations: list of channel names represent destinations
@@ -148,10 +150,10 @@ class Node:
         :param response_timeout: automatically create a response handler with the given response_timeout
         :return: A ResponseHandlerBase to get results
         :raises ValueError: both response_handler and response_timeout are specified.
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
-        :raises exc.UnsupportedObjectError: unsupported objects appear in the command object
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.UnsupportedObjectError: unsupported objects appear in the command object
         """
         cid = self._generate_cid()
         wrapped_cmd = CommandWrapper(nid=self._nid, cid=cid, cmd=cmd)
@@ -168,10 +170,10 @@ class Node:
         :param cmd: command to be sent
         :param destinations: list of channel names represent destinations
         :return: numeral of received, None presents unknown
-        :raises exc.InvalidChannelError: channel is not available.
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
-        :raises exc.UnsupportedObjectError: unsupported objects appear in the command object
+        :raises ~exc.InvalidChannelError: channel is not available.
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.UnsupportedObjectError: unsupported objects appear in the command object
         """
         if isinstance(destinations, str):
             destinations = [destinations]
@@ -218,13 +220,14 @@ class Node:
     def recv(self, block=True, timeout=None) -> Optional[CommandBase]:
         """
         Receive a command from the backend server.
+
         :param block: is blocking or not
         :param timeout: timeout of this operation
         :return: ICommand or None, None present no command received
-        :raises exc.NotConnectedError: the backend server is not connected.
-        :raises exc.ServerDisconnectedError: server disconnect during the invocation
-        :raises exc.InvalidFormatError: unrecognized raw data found while deserializing
-        :raises exc.CommandNotRegisteredError: found a command that is not registered
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
+        :raises ~exc.InvalidFormatError: unrecognized raw data found while deserializing
+        :raises ~exc.CommandNotRegisteredError: found a command that is not registered
         """
         raw_data = self._connection.recv(block, timeout)
         if raw_data is None:
@@ -235,9 +238,10 @@ class Node:
     def register_cmd(self, cmd_typ: Type[CommandBase], ctx: Any = NoContextSpecified) -> None:
         """
         Register a command
+
         :param cmd_typ: a command class
-        :param ctx: context for command execution
-        :raises exc.CommandHasRegisteredError: registering a command that has registered
+        :param ctx: context for command execution. :py:data:`NoContextSpecified` presents no context specified.
+        :raises ~exc.CommandHasRegisteredError: registering a command that has registered
         """
         with self._cmd_contexts_lock:
             self._serializer.register_cmd(cmd_typ)
@@ -245,13 +249,17 @@ class Node:
                 self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
 
     @overload
-    def get_cmd_context(self, cmd_typ: Type[CommandBase]) -> Any: ...
+    def get_cmd_context(self, cmd_typ: Type[CommandBase]) -> Any:
+        ...
+
     @overload
-    def get_cmd_context(self, name: str) -> Any: ...
+    def get_cmd_context(self, name: str) -> Any:
+        ...
 
     def get_cmd_context(self, key) -> Any:
         """
         Get command execution context by the command class or its name.
+
         :raises TypeError: wrong type argument was specified.
         :raises KeyError: context was not found in node
         """
@@ -267,6 +275,7 @@ class Node:
     def add_response(self, cid: str, response: Any) -> None:
         """
         Add a response to be handled
+
         :param cid: command id
         :param response: response contents
         """
@@ -279,7 +288,7 @@ class Node:
                 response_str = response_str[:50] + '...'
             logging.warning(f"Received response {response_str}, but command {cid} not found")
 
-    def run_forever(
+    def recv_until_close(
             self,
             sleep: float = 0.5,
             num_workers: int = None,
@@ -287,27 +296,40 @@ class Node:
             reconnect_max_tries: int = 10,
             reconnect_interval: float = 10
     ) -> None:
-        # TODO doc this method
-        try:
-            if num_workers is None:
-                num_workers = max(os.cpu_count(), 3)
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                while not self._closed_event.wait(0):
-                    try:
-                        cmd = self.recv(block=True, timeout=sleep)
-                        if cmd is not None:
-                            logger.info(f"received command: {cmd}")
-                            # TODO handle error occurred in submitted command execution
-                            executor.submit(cmd.execute, self)
-                    except exc.ServerDisconnectedError:
-                        if self._closed_event.wait(0):  # connection closed while blocking
-                            break
-                        self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
+        """
+        Receive and execute commands until this node is closed.
 
-                logger.info("connection closed")
-        finally:
+        .. note:: The received command will be executed in a thread pool.
+
+        :param sleep: max waiting time for a command
+        :param num_workers: max number of workers for the internal
+           :py:class:`~concurrent.futures.ThreadPoolExecutor`
+        :param close_when_exit: close this node when this method has exited in
+           any situation. For example, a :py:exc:`KeyboardInterrupt` has been
+           raised.
+        :param reconnect_max_tries: the max number of times to reconnect
+        :param reconnect_interval: the interval between reconnects
+        """
+        if num_workers is None:
+            num_workers = max(os.cpu_count(), 3)
+        with ExitStack() as stack:
+            executor = stack.enter_context(ThreadPoolExecutor(max_workers=num_workers))
             if close_when_exit:
-                self.close()
+                stack.enter_context(self)
+
+            while not self._closed_event.wait(0):
+                try:
+                    cmd = self.recv(block=True, timeout=sleep)
+                    if cmd is not None:
+                        logger.info(f"received command: {cmd}")
+                        # TODO handle error occurred in submitted command execution
+                        executor.submit(cmd.execute, self)
+                except exc.ServerDisconnectedError:
+                    if self._closed_event.wait(0):  # connection closed while blocking
+                        break
+                    self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
+
+            logger.info("connection closed")
 
     def __reconnect_to_backend(self, reconnect_max_tries: int, reconnect_interval: float):
         last_err = None
@@ -339,11 +361,17 @@ class Node:
         with self._rh_lock:
             return len(self._sent_cmd_response_handlers)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def __del__(self) -> None:
         self.close()
 
 
-def to_cmd_dict(o) -> dict:
+def _to_cmd_dict(o) -> dict:
     if isinstance(o, CommandBase):
         return o.to_dict(prevent_circular=True, filter=cmd_to_dict_filter)
     elif isinstance(o, dict):
@@ -354,7 +382,7 @@ def to_cmd_dict(o) -> dict:
 class CommandWrapper(CommandBase[NoResponseType]):
     nid: str = cfg.Option(required=True, type=str)
     cid: str = cfg.Option(required=True, type=str)
-    cmd: dict = cfg.Option(required=True, type=to_cmd_dict)
+    cmd: dict = cfg.Option(required=True, type=_to_cmd_dict)
 
     __cmd_name__ = "__cmd_wrapper__"
 

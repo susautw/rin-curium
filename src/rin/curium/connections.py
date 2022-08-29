@@ -70,7 +70,7 @@ class RedisConnection(IConnection):
 
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ConnectionFailedError)
     def reconnect(self) -> None:
-        self.verify_connected()
+        self._verify_connected()
         self._redis.set(self._uid_key, 1, get=True, ex=self._expire)
 
     def _refresh_uid(self) -> None:
@@ -103,13 +103,13 @@ class RedisConnection(IConnection):
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def join(self, name: str) -> None:
         self._verify_name(name)
-        self.verify_connected()
+        self._verify_connected()
         self._pubsub.psubscribe(f"*|{name}|*")
 
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def leave(self, name: str) -> None:
         self._verify_name(name)
-        self.verify_connected()
+        self._verify_connected()
         self._pubsub.punsubscribe(f"*|{name}|*")
 
     @atomicmethod
@@ -117,7 +117,7 @@ class RedisConnection(IConnection):
     def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
         for channel_name in destinations:
             self._verify_name(channel_name)
-        self.verify_connected()
+        self._verify_connected()
         if self._ping_while_sending:
             # ensure connected
             self._send_ping_event.clear()
@@ -132,7 +132,7 @@ class RedisConnection(IConnection):
 
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
-        self.verify_connected()
+        self._verify_connected()
         if not block:
             timeout = 0
         while True:
@@ -150,7 +150,7 @@ class RedisConnection(IConnection):
                     self._send_ping_event.set()
         return message_pack['data']
 
-    def verify_connected(self) -> None:
+    def _verify_connected(self) -> None:
         if self._pubsub is None:
             raise exc.NotConnectedError("operation before connect")
 

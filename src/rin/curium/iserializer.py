@@ -12,7 +12,7 @@ class ISerializer(ABC):
 
         :param cmd: command to be serialized
         :return: raw bytes in bytes
-        :raises exc.UnsupportedObjectError: unsupported objects appear in the command object
+        :raises ~exc.UnsupportedObjectError: unsupported objects appear in the command object
         """
 
     @abstractmethod
@@ -22,8 +22,8 @@ class ISerializer(ABC):
 
         :param raw_data: raw data to be deserialized
         :return: a command object
-        :raises exc.InvalidFormatError: unrecognized raw data found while deserializing
-        :raises exc.CommandNotRegisteredError: found a command that is not registered
+        :raises ~exc.InvalidFormatError: unrecognized raw data found while deserializing
+        :raises ~exc.CommandNotRegisteredError: found a command that is not registered
         """
 
     @abstractmethod
@@ -32,5 +32,5 @@ class ISerializer(ABC):
         Register a command for deserialization.
 
         :param cmd_type: a command class
-        :raises exc.CommandHasRegisteredError: registering a command that has registered
+        :raises ~exc.CommandHasRegisteredError: registering a command that has registered
         """
