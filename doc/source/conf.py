@@ -18,10 +18,12 @@ author = 'susautw'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc',
+    'sphinx_toolbox.more_autosummary',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'sphinx.ext.autodoc',
+    'rin.docutils.autodecorator'
 ]
 
 templates_path = ['_templates']
@@ -29,6 +31,7 @@ exclude_patterns = []
 
 intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}
 autodoc_member_order = 'bysource'
+
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

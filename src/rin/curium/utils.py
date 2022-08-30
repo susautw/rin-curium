@@ -6,6 +6,8 @@ from fancy import config as cfg
 from threading import Lock, RLock
 from typing import Callable, Type
 
+from rin.docutils import markers
+
 
 class Atomic:
     """
@@ -63,6 +65,7 @@ class Atomic:
         return inner
 
 
+@markers.decorator
 def atomicfunction(fn):
     """ Convert a function to an atomic operation """
     lock = RLock()
@@ -75,6 +78,7 @@ def atomicfunction(fn):
     return wrapper
 
 
+@markers.decorator
 class atomicmethod:
     """ A descriptor converts a method to an atomic operation """
     def __init__(self, method):
@@ -116,6 +120,7 @@ def cmd_to_dict_filter(p: cfg.PlaceHolder) -> bool:
     return isinstance(p, cfg.Option) or p.name == "__cmd_name__"
 
 
+@markers.decorator
 def add_error_handler(
         error_typ, *,
         reraise_by: Type[Exception] = None,
@@ -161,18 +166,3 @@ def add_error_handler(
         return _wrapper
 
     return _decorator
-
-
-class Flag:
-    """
-    This class represents a flag that can make some choices.
-
-    .. note:: This class is for documentation purposes.
-    """
-    def __init__(self, name: str = None):
-        self.name = name
-
-    def __str__(self):
-        return self.name or self.__class__.__name__
-
-    __repr__ = __str__

@@ -12,19 +12,19 @@ from weakref import WeakValueDictionary
 
 from fancy import config as cfg
 from redis import Redis
+from rin.docutils.flag import ClassNamedFlag, Flag
 
 from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc
 from .connections import RedisConnection
 from .response_handlers import BlockUntilAllReceived
 from .serializers import JSONSerializer
-from .utils import cmd_to_dict_filter, atomicmethod, Flag
+from .utils import cmd_to_dict_filter, atomicmethod
 
 R = TypeVar("R")
 
 
-class NoResponseType(Flag):
-    def __init__(self):
-        super().__init__()
+class NoResponseType(ClassNamedFlag):
+    pass
 
 
 NoResponse = NoResponseType()  #: Represents there is no response returned from a command

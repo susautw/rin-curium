@@ -37,6 +37,17 @@
    {% endif %}
    {% endblock %}
 
+   {% block decorators %}
+   {% if decorators %}
+   .. rubric:: {{ _('Decorators') }}
+
+   .. autosummary::
+   {% for item in decorators %}
+      {{ item }}
+   {%- endfor %}
+   {% endif %}
+   {% endblock %}
+
    {% block exceptions %}
    {% if exceptions %}
    .. rubric:: {{ _('Exceptions') }}
