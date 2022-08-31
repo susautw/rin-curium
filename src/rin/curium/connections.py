@@ -136,8 +136,11 @@ class RedisConnection(IConnection):
         if not block:
             timeout = 0
         while True:
-            message_pack = self._pubsub.handle_message(
-                self._pubsub.parse_response(False, timeout)
+            pubsub = self._pubsub
+            if pubsub is None:
+                raise exc.ServerDisconnectedError()
+            message_pack = pubsub.handle_message(
+                pubsub.parse_response(False, timeout)
             )
 
             if message_pack is None:

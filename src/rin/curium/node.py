@@ -1,8 +1,9 @@
+import functools
 import logging
 import os
 import time
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import ExitStack
 from functools import lru_cache
 from itertools import count
@@ -30,6 +31,19 @@ class NoResponseType(ClassNamedFlag):
 NoResponse = NoResponseType()  #: Represents there is no response returned from a command
 
 NoContextSpecified = Flag("NoContextSpecified")  #: Represents no context specified while registering a command
+
+
+def error_logging(cmd: CommandBase, exc_: BaseException) -> None:
+    """
+    Default error handler for :meth:`Node.recv_until_close`
+
+    :param cmd: the command which raises the exception
+    :param exc_: incoming exception
+    """
+    logger.exception(
+        f"An Exception raised in the command execution for {cmd}",
+        exc_info=exc_
+    )
 
 
 class Node:
@@ -294,7 +308,8 @@ class Node:
             num_workers: int = None,
             close_when_exit: bool = True,
             reconnect_max_tries: int = 10,
-            reconnect_interval: float = 10
+            reconnect_interval: float = 10,
+            error_handler: Callable[[CommandBase, BaseException], None] = error_logging
     ) -> None:
         """
         Receive and execute commands until this node is closed.
@@ -309,6 +324,7 @@ class Node:
            raised.
         :param reconnect_max_tries: the max number of times to reconnect
         :param reconnect_interval: the interval between reconnects
+        :param error_handler: a callable handles exceptions raised by commands
         """
         if num_workers is None:
             num_workers = max(os.cpu_count(), 3)
@@ -322,14 +338,27 @@ class Node:
                     cmd = self.recv(block=True, timeout=sleep)
                     if cmd is not None:
                         logger.info(f"received command: {cmd}")
-                        # TODO handle error occurred in submitted command execution
-                        executor.submit(cmd.execute, self)
+                        result = executor.submit(cmd.execute, self)
+                        result.add_done_callback(
+                            self.__create_result_error_handler(cmd, error_handler)
+                        )
                 except exc.ServerDisconnectedError:
                     if self._closed_event.wait(0):  # connection closed while blocking
                         break
                     self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
-
             logger.info("connection closed")
+
+    def __create_result_error_handler(
+            self,
+            cmd: CommandBase,
+            error_handler: Callable[[CommandBase, BaseException], None]
+    ):
+        @functools.wraps(error_handler)
+        def wrapped_error_handler(future: Future) -> None:
+            exc_ = future.exception()
+            if exc is not None:
+                error_handler(cmd, exc_)
+        return wrapped_error_handler
 
     def __reconnect_to_backend(self, reconnect_max_tries: int, reconnect_interval: float):
         last_err = None
