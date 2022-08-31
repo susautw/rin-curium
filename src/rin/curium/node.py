@@ -405,11 +405,17 @@ class CommandWrapper(CommandBase[NoResponseType]):
     def to_dict(
             self,
             recursive=True,
-            prevent_circular=False, *,
+            prevent_circular=True, *,
             load_lazies=None,
             filter: Callable[[cfg.PlaceHolder], bool] = None
     ) -> dict:
-        # cmd already convert to a dict.
+        """
+        Convert this command wrapper to a :class:`dict`.
+        """
+        if not recursive or not prevent_circular:
+            warnings.warn("param recursive and prevent_circular are always True in CommandWrapper. "
+                          "set these param will not affect anything.", category=UserWarning)
+        # turn off recursive because the attribute `cmd` has been converted before.
         return super().to_dict(recursive=False, prevent_circular=True, filter=filter)
 
 
