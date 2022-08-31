@@ -41,7 +41,7 @@ def error_logging(cmd: CommandBase, exc_: BaseException) -> None:
     :param exc_: incoming exception
     """
     logger.exception(
-        f"An Exception raised in the command execution for {cmd}",
+        f"An Exception raised in the command execution: {cmd}",
         exc_info=exc_
     )
 
@@ -342,7 +342,7 @@ class Node:
                         result.add_done_callback(
                             self.__create_result_error_handler(cmd, error_handler)
                         )
-                except exc.ServerDisconnectedError:
+                except exc.CuriumConnectionError:
                     if self._closed_event.wait(0):  # connection closed while blocking
                         break
                     self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
@@ -356,7 +356,7 @@ class Node:
         @functools.wraps(error_handler)
         def wrapped_error_handler(future: Future) -> None:
             exc_ = future.exception()
-            if exc is not None:
+            if exc_ is not None:
                 error_handler(cmd, exc_)
         return wrapped_error_handler
 

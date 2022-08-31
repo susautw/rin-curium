@@ -95,7 +95,6 @@ class RedisConnection(IConnection):
                 self._pubsub.close()
                 self._pubsub = None
                 self._refresh_thread_close.set()
-                self._refresh_thread.join(timeout=2)
                 self._refresh_thread = None
 
                 self._redis.delete(self._uid_key)
@@ -115,6 +114,9 @@ class RedisConnection(IConnection):
     @atomicmethod
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
+        if not destinations:
+            logger.warning("no channel specified, this operation is cancelled.")
+            return 0
         for channel_name in destinations:
             self._verify_name(channel_name)
         self._verify_connected()

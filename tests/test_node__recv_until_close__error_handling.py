@@ -1,32 +1,41 @@
+from typing import NoReturn
 from unittest.mock import MagicMock
 
-import pytest
 from fakeredis import FakeRedis
 
 from rin.curium import Node, CommandBase, RedisConnection
-from rin.curium.node import error_logging
+from rin.curium.node import error_logging, NoResponse
 
 
 class ACommandRaisingError(CommandBase):
 
-    def execute(self, ctx: Node) -> None:
-        ctx.close()
+    def execute(self, ctx: Node) -> NoReturn:
         raise Exception("an Exception")
 
 
-@pytest.mark.slow
-def test_node__recv_until_close__error_handling():
-    node = Node(RedisConnection(FakeRedis(), ping_while_sending=False))
-    node.register_cmd(ACommandRaisingError)
+class ACommandDoNothing(CommandBase):
+    def execute(self, ctx: "Node") -> NoResponse:
+        return NoResponse
+
+
+def test_node__recv_until_close__error_handling(mocker):
+    node = Node(RedisConnection(FakeRedis()))
     node.connect()
-    cmd = ACommandRaisingError({})
-    node.send_no_response(cmd, node.nid)
-    mock = MagicMock()
-    # noinspection PyTypeChecker
-    node.recv_until_close(error_handler=mock)
-    mock.assert_called_once()
-    assert mock.call_args.args[0].to_dict() == cmd.to_dict()
-    assert str(mock.call_args.args[1]) == "an Exception"
+    cmd_raises_error = ACommandRaisingError({})
+    mocker.patch.object(node, "recv", side_effect=[
+        cmd_raises_error,
+        ACommandDoNothing({}),
+        RuntimeError()  # escape the recv_until_close loop
+    ])
+    error_handler_mock = MagicMock()
+    try:
+        # noinspection PyTypeChecker
+        node.recv_until_close(error_handler=error_handler_mock)
+    except RuntimeError:
+        pass
+    error_handler_mock.assert_called_once()
+    assert error_handler_mock.call_args.args[0] is cmd_raises_error
+    assert str(error_handler_mock.call_args.args[1]) == "an Exception"
 
 
 def test_node__error_logging(mocker):
@@ -39,6 +48,6 @@ def test_node__error_logging(mocker):
     exc_ = Exception()
     error_logging(cmd, exc_)
     mock_exception.assert_called_once_with(
-        f"An Exception raised in the command execution for {cmd}",
+        f"An Exception raised in the command execution: {cmd}",
         exc_info=exc_
     )
