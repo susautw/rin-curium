@@ -35,13 +35,13 @@ def test_connect__with_dup_id(mocker):
 def test_connect__ping_failed(mocker):
     r = FakeRedis()
     mocker.patch.object(r, "ping", side_effect=exceptions.ConnectionError)
-    conn = RedisConnection(r, namespace="NS", expire=10)
+    conn = RedisConnection(r, namespace="NS")
     with pytest.raises(exc.ConnectionFailedError):
         conn.connect()
 
 
 def test_connect__when_already_connected():
-    conn = RedisConnection(FakeRedis(), namespace="NS", expire=10)
+    conn = RedisConnection(FakeRedis(), namespace="NS")
     uid = conn.connect()
     with pytest.warns(RuntimeWarning, match=f"Already connected. uid: {uid}"):
         assert conn.connect() == uid
