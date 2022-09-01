@@ -84,3 +84,25 @@ def test_close(mocker):
     conn.close()
     conn.close()  # the second `close` shouldn't affect anything
     spy_delete.assert_called_once_with(f'NS:{uid}')
+
+
+def test_close__disconnect_while_closing(mocker):
+    conn = RedisConnection(FakeRedis())
+    mocker.patch.object(conn._redis, "delete", side_effect=exceptions.ConnectionError)
+    conn.close()  # expect no exceptions raised
+
+
+@pytest.mark.parametrize(
+    "name, args", [
+        ("join", ("an|invalid|channel",)),
+        ("leave", ("an|invalid|channel",)),
+        ("send", (b'data', ["a valid channel", "an|invalid|channel"],)),
+    ]
+)
+def test_operation_with_invalid_channel_name(name, args):
+    conn = RedisConnection(FakeRedis())
+    with pytest.raises(
+            exc.InvalidChannelError,
+            match="character '|' shouldn't appear in channel name: an|invalid|channel"
+    ):
+        getattr(conn, name)(*args)
