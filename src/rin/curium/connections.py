@@ -137,17 +137,18 @@ class RedisConnection(IConnection):
         self._verify_connected()
         if not block:
             timeout = 0
+        elif timeout is not None:
+            block = False  # TODO explain block with timeout
         while True:
             pubsub = self._pubsub
             if pubsub is None:
                 raise exc.ServerDisconnectedError()
             message_pack = pubsub.handle_message(
-                pubsub.parse_response(False, timeout)
+                pubsub.parse_response(block, timeout)
             )
 
             if message_pack is None:
-                if not block:
-                    return None
+                return None
             else:
                 if message_pack['type'] == 'pmessage':
                     break

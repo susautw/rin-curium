@@ -1,8 +1,10 @@
+from unittest.mock import call
+
 import pytest
 from fakeredis import FakeRedis
 from redis import exceptions
 
-from rin.curium import RedisConnection, exc
+from rin.curium import RedisConnection, exc, logger
 
 
 def test_connect(mocker):
@@ -45,6 +47,28 @@ def test_connect__when_already_connected():
     uid = conn.connect()
     with pytest.warns(RuntimeWarning, match=f"Already connected. uid: {uid}"):
         assert conn.connect() == uid
+
+
+def test_refresh_uid(mocker):
+    r = FakeRedis()
+    conn = RedisConnection(r, namespace="NS", expire=10)
+    conn._uid_key = "NS:UID"
+    conn._expire = 10
+    mocker.patch.object(conn._refresh_thread_close, "wait", side_effect=[False] * 5 + [True])
+    mock_setex = mocker.patch.object(conn._redis, "setex", side_effect=[
+        None,
+        exceptions.ConnectionError(),  # expect only show one `Server disconnected` warning
+        exceptions.ConnectionError(),
+        None,
+        None
+    ])
+    mocker_warning = mocker.patch.object(logger, "warning")
+    mock_sleep = mocker.patch("time.sleep")
+    conn._refresh_uid()
+
+    assert mock_setex.call_args_list == [call("NS:UID", 10, 1)] * 5
+    assert mocker_warning.call_args_list == [call("Server disconnected"), call("Server reconnected")]
+    assert mock_sleep.call_count == 5
 
 
 @pytest.mark.parametrize("name, args", [
@@ -93,6 +117,25 @@ def test_close__disconnect_while_closing(mocker):
 
 
 @pytest.mark.parametrize(
+    "opname, mock_getter, op_args, excepted_call_args", [
+        ("join", lambda m, conn: m.patch.object(conn._pubsub, "psubscribe"), ("channel",), ("*|channel|*",)),
+        ("leave", lambda m, conn: m.patch.object(conn._pubsub, "punsubscribe"), ("channel",), ("*|channel|*",)),
+        (
+                "send",
+                lambda m, conn: m.patch.object(conn._redis, "publish"),
+                (b'data', ["channel"],), ("|channel|", b'data')
+        ),
+    ]
+)
+def test_disconnect_during_operation(mocker, opname, mock_getter, op_args, excepted_call_args):
+    conn = RedisConnection(FakeRedis(), ping_while_sending=False)
+    conn.connect()
+    mock = mock_getter(mocker, conn)
+    getattr(conn, opname)(*op_args)
+    mock.assert_called_once_with(*excepted_call_args)
+
+
+@pytest.mark.parametrize(
     "name, args", [
         ("join", ("an|invalid|channel",)),
         ("leave", ("an|invalid|channel",)),
@@ -106,3 +149,19 @@ def test_operation_with_invalid_channel_name(name, args):
             match="character '|' shouldn't appear in channel name: an|invalid|channel"
     ):
         getattr(conn, name)(*args)
+
+
+def test_join(mocker):
+    conn = RedisConnection(FakeRedis())
+    conn.connect()
+    mock_psubscribe = mocker.patch.object(conn._pubsub, "psubscribe")
+    conn.join("channel")
+    mock_psubscribe.assert_called_once_with("*|channel|*")
+
+
+def test_leave(mocker):
+    conn = RedisConnection(FakeRedis())
+    conn.connect()
+    mock_punsubscribe = mocker.patch.object(conn._pubsub, "punsubscribe")
+    conn.leave("channel")
+    mock_punsubscribe.assert_called_once_with("*|channel|*")
