@@ -134,11 +134,30 @@ class RedisConnection(IConnection):
 
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
     def recv(self, block=True, timeout: float = None) -> Optional[bytes]:
+        """
+        Receive data from the backend server.
+
+        .. note:: Implementation detail:
+            In Redis 4.3.4, :meth:`Pubsub.parse_response` cannot set both `block` and `timeout`.
+            In fact, invoking the method with (block=False, timeout=...) will block with the timeout,
+            which we expected.
+            And we can implement non-blocking with (block=False, timeout=0).
+
+        :param block: is blocking or not
+        :param timeout: timeout of this operation in second, None presents forever
+        :return: received data.
+                 None presents no data received
+        :raises ~exc.NotConnectedError: the backend server is not connected.
+        :raises ~exc.ServerDisconnectedError: server disconnect during the invocation
+        """
         self._verify_connected()
+
+        # See the note in the docstring
         if not block:
             timeout = 0
         elif timeout is not None:
-            block = False  # TODO explain block with timeout
+            block = False
+
         while True:
             pubsub = self._pubsub
             if pubsub is None:
