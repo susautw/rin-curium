@@ -34,16 +34,16 @@ class JSONSerializer(ISerializer):
         cmd_name = raw_data.pop("__cmd_name__")
         with self._registry_lock:
             if cmd_name not in self._registry:
-                raise exc.CommandNotRegisteredError(f'command {cmd_name} is not registered')
+                raise exc.CommandNotRegisteredError(cmd_name)
             cmd_typ = self._registry[cmd_name]
         return cmd_typ(raw_data)
 
     def register_cmd(self, cmd_type: Type[CommandBase]) -> None:
         with self._registry_lock:
-            if cmd_type.__cmd_name__ in self._registry and \
-                    cmd_type is not self._registry[cmd_type.__cmd_name__]:
-                raise exc.CommandHasRegisteredError(
-                    f"Register command {cmd_type} using a duplicated name "
-                    f"with command {self._registry[cmd_type.__cmd_name__]}'s name"
-                )
+            if cmd_type.__cmd_name__ in self._registry:
+                if cmd_type is not self._registry[cmd_type.__cmd_name__]:
+                    raise exc.CommandHasRegisteredError(
+                        f"Register command {cmd_type} using a duplicated name "
+                        f"with command {self._registry[cmd_type.__cmd_name__]}'s name"
+                    )
             self._registry[cmd_type.__cmd_name__] = cmd_type
