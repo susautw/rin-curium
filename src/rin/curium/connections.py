@@ -139,12 +139,13 @@ class RedisConnection(IConnection):
 
         .. note:: Implementation detail:
             In Redis 4.3.4, :meth:`Pubsub.parse_response` cannot set both `block` and `timeout`.
-            In fact, invoking the method with (block=False, timeout=...) will block with the timeout,
+            In fact, invoking the method with ``(block=False, timeout=...)`` will block with the timeout,
             which we expected.
-            And we can implement non-blocking with (block=False, timeout=0).
+            And we can implement non-blocking with ``(block=False, timeout=0)``.
 
         :param block: is blocking or not
-        :param timeout: timeout of this operation in second, None presents forever
+        :param timeout: timeout of this operation in second, None presents forever.
+           this option is ignored if ``block`` is ``False``.
         :return: received data.
                  None presents no data received
         :raises ~exc.NotConnectedError: the backend server is not connected.

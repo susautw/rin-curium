@@ -165,3 +165,92 @@ def test_leave(mocker):
     mock_punsubscribe = mocker.patch.object(conn._pubsub, "punsubscribe")
     conn.leave("channel")
     mock_punsubscribe.assert_called_once_with("*|channel|*")
+
+
+@pytest.mark.parametrize("channels, pattern", [
+    (["a"], "|a|"),
+    (["a", "bc"], "|a|bc|"),
+    (["a", "bc", "def"], "|a|bc|def|"),
+])
+def test_send(mocker, channels, pattern):
+    conn = RedisConnection(FakeRedis(), ping_while_sending=False)
+    mock_publish = mocker.patch.object(conn._redis, "publish")
+    conn.connect()
+    conn.send(b'data', channels)
+    mock_publish.assert_called_once_with(pattern, b'data')
+
+
+def test_send__with_no_destination(mocker):
+    conn = RedisConnection(FakeRedis())
+    mock_warning = mocker.patch.object(logger, "warning")
+    assert conn.send(b'data', []) == 0
+    mock_warning.assert_called_once_with("no channel specified, this operation is cancelled.")
+
+
+@pytest.mark.parametrize("success", [True, False])
+def test_send__with_ping(mocker, success):
+    send_timeout = 10
+    conn = RedisConnection(FakeRedis(), send_timeout=send_timeout, ping_while_sending=True)
+    conn.connect()
+    mock_ping = mocker.patch.object(conn._pubsub, "ping")
+    mock_wait = mocker.patch.object(conn._send_ping_event, "wait", side_effect=[success])
+    mock_publish = mocker.patch.object(conn._redis, "publish")
+
+    if not success:
+        with pytest.raises(exc.ServerDisconnectedError):
+            conn.send(b'data', ['destination'])
+    else:
+        conn.send(b'data', ['destination'])
+
+    mock_ping.assert_called_once_with(conn._ping_msg)
+    mock_wait.assert_called_once_with(send_timeout)
+    if success:
+        mock_publish.assert_called_once_with("|destination|", b'data')
+
+
+def test_recv(mocker):
+    conn = RedisConnection(FakeRedis())
+    conn.connect()
+    mocker.patch.object(conn._pubsub, "parse_response")
+    mocker.patch.object(conn._pubsub, "handle_message", side_effect=[
+        {"type": "pong", "data": conn._ping_msg},
+        {"type": "pmessage", "data": b'data'}
+    ])
+    mock_set = mocker.patch.object(conn._send_ping_event, "set")
+    assert conn.recv() == b'data'
+    mock_set.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "block, timeout, expected_call", [
+        (True, None, call(True, None)),
+        (True, 10, call(False, 10)),
+        (False, None, call(False, 0)),
+        (False, ..., call(False, 0)),
+    ]
+)
+def test_recv__invoke_parse_response(mocker, block, timeout, expected_call):
+    conn = RedisConnection(FakeRedis())
+    conn.connect()
+    mock_parse_response = mocker.patch.object(conn._pubsub, "parse_response")
+    mocker.patch.object(conn._pubsub, "handle_message", side_effect=[None])
+    conn.recv(block, timeout)
+    assert mock_parse_response.call_count == 1
+    assert mock_parse_response.call_args_list[0] == expected_call
+
+
+def test_recv__disconnect_during_receiving(mocker):
+    conn = RedisConnection(FakeRedis())
+    mocker.patch.object(conn, "_verify_connected")  # simulate that the first connection test is passed
+    with pytest.raises(exc.ServerDisconnectedError):
+        conn.recv()
+
+
+def test_recv__timeout_or_non_blocking_with_no_message(mocker):
+    conn = RedisConnection(FakeRedis())
+    conn.connect()
+    # assume parse_response end with timeout
+    mocker.patch.object(conn._pubsub, "parse_response")
+    mocker.patch.object(conn._pubsub, "handle_message", side_effect=[None])
+
+    assert conn.recv() is None
