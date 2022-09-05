@@ -262,13 +262,11 @@ class Node:
             if ctx is not NoContextSpecified:
                 self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
 
+    # @formatter:off
     @overload
-    def get_cmd_context(self, cmd_typ: Type[CommandBase]) -> Any:
-        ...
-
+    def get_cmd_context(self, cmd_typ: Type[CommandBase]) -> Any: ...
     @overload
-    def get_cmd_context(self, name: str) -> Any:
-        ...
+    def get_cmd_context(self, name: str) -> Any: ...
 
     def get_cmd_context(self, key) -> Any:
         """
@@ -285,6 +283,7 @@ class Node:
             raise TypeError(f"No signature matched to execute this method")
         with self._cmd_contexts_lock:
             return self._cmd_contexts[name]
+    # @formatter:on
 
     def add_response(self, cid: str, response: Any) -> None:
         """
@@ -358,6 +357,7 @@ class Node:
             exc_ = future.exception()
             if exc_ is not None:
                 error_handler(cmd, exc_)
+
         return wrapped_error_handler
 
     def __reconnect_to_backend(self, reconnect_max_tries: int, reconnect_interval: float):
