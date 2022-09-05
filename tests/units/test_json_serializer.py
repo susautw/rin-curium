@@ -1,36 +1,12 @@
-from typing import List
-
 import pytest
-from fancy import config as cfg
-from rin.curium import CommandBase, Node, exc
-from rin.curium.command_base import T
+from rin.curium import exc
 from rin.curium.serializers import JSONSerializer
+from units.fake_commands import MyCommand, AnotherCommand
 
 
 @pytest.fixture
 def serializer():
     return JSONSerializer()
-
-
-class MyCommand(CommandBase):
-    __cmd_name__ = "my_command"
-    x = cfg.Option()
-    y: List[int] = cfg.Option(type=[int])
-    z: float = cfg.Lazy(lambda c: c.x / 2)
-    p: bool = cfg.PlaceHolder()
-
-    def post_load(self):
-        self.p = True
-
-    def execute(self, ctx: "Node") -> None:
-        pass
-
-
-class AnotherCommand(CommandBase):
-    __cmd_name__ = "my_command"
-
-    def execute(self, ctx: "Node") -> T:
-        pass
 
 
 def test_serialize(serializer):
@@ -80,7 +56,7 @@ def test_register_cmd__with_duplicated_command_name(serializer):
     serializer.register_cmd(MyCommand)
     serializer.register_cmd(MyCommand)  # expected no error raised
     with pytest.raises(
-            exc.CommandHasRegisteredError
-            , match=f"Register command {AnotherCommand} using a duplicated name with command {MyCommand}'s name"
+            exc.CommandHasRegisteredError,
+            match=f"Register command {AnotherCommand} using a duplicated name with command {MyCommand}'s name"
     ):
         serializer.register_cmd(AnotherCommand)
