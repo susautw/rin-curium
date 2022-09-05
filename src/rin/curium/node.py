@@ -107,7 +107,7 @@ class Node:
         if not send_only:
             self.join("all")
         self._check_response_handlers_thread = Thread(
-            target=self._check_response_handlers, name="response_handler"
+            target=self._check_response_handlers, name="response_handler", daemon=True
         )
         self._check_response_handlers_thread.start()
 
@@ -119,8 +119,6 @@ class Node:
         """
         if not self._closed_event.wait(0):
             self._closed_event.set()
-            if self._check_response_handlers_thread is not None:
-                self._check_response_handlers_thread.join(timeout=1)
             self._connection.close()
 
     def join(self, name: str) -> None:
@@ -157,6 +155,7 @@ class Node:
 
         .. note:: This method is intended to get responses from destination nodes.
            Any command sent by this method will be wrapped by :class:`CommandWrapper` to handle the response.
+           If you aren't interest in responses, please use :meth:`Node.send_no_response`.
 
         :param cmd: command to be sent
         :param destinations: list of channel names represent `destinations`
