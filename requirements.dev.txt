@@ -1,7 +1,7 @@
 furo
 sphinx
 
-fakeredis~=1.9.0
+fakeredis>=1.9.1
 pytest~=7.1.2
 pytest-mock~=3.8.2
 pytest-parallel
