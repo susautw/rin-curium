@@ -96,7 +96,7 @@ class Node:
         """
         Connect to the backend server, join ``own`` and ``all`` channels, then start to check response handlers.
 
-        :param send_only: don't join the "all" channel.
+        :param send_only: don't join the ``all`` channel.
         :raises ~exc.ConnectionFailedError: fail to connect.
         """
         if self._nid is not None:
@@ -431,6 +431,7 @@ class CommandWrapper(CommandBase[NoResponseType]):
         assert isinstance(s, ISerializer)
         return s.deserialize(self.cmd)
 
+    # noinspection PyShadowingBuiltins
     def to_dict(
             self,
             recursive=True,
