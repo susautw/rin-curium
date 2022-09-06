@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from functools import lru_cache
 from itertools import count
 from threading import Lock, Thread, Event
-from typing import List, TypeVar, Optional, Type, Any, Dict, Callable, Union, overload
+from typing import TypeVar, Optional, Type, Any, Dict, Callable, Union, overload, Iterable
 from weakref import WeakValueDictionary
 
 from fancy import config as cfg
@@ -146,7 +146,7 @@ class Node:
     def send(
             self,
             cmd: CommandBase[R],
-            destinations: Union[str, List[str]],
+            destinations: Union[str, Iterable[str]],
             response_handler: Optional[ResponseHandlerBase[R]] = None,
             response_timeout: float = None
     ) -> ResponseHandlerBase[R]:
@@ -176,7 +176,7 @@ class Node:
         self._add_response_handler(cid, rh)
         return rh
 
-    def send_no_response(self, cmd: CommandBase, destinations: Union[str, List[str]]) -> Optional[int]:
+    def send_no_response(self, cmd: CommandBase, destinations: Union[str, Iterable[str]]) -> Optional[int]:
         """
         Send command to the given destinations without wrapping the command.
 
@@ -194,7 +194,7 @@ class Node:
             warnings.warn(f"Destinations {destinations} has been reduced to ['all']."
                           f" To eliminate duplicated command", category=RuntimeWarning)
             destinations = ['all']
-        destinations = list(set(destinations))
+        destinations = set(destinations)
         num_receivers = self._connection.send(self._serializer.serialize(cmd), destinations)
         logger.info(f"send command: {cmd}")
         return num_receivers

@@ -2,7 +2,7 @@ import time
 import uuid
 import warnings
 from threading import Thread, Event, Lock
-from typing import Optional, List
+from typing import Optional, Iterable
 
 from redis import Redis, exceptions
 from redis.client import PubSub
@@ -113,7 +113,7 @@ class RedisConnection(IConnection):
 
     @atomicmethod
     @add_error_handler(exceptions.ConnectionError, reraise_by=exc.ServerDisconnectedError)
-    def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
+    def send(self, data: bytes, destinations: Iterable[str]) -> Optional[int]:
         if not destinations:
             logger.warning("no channel specified, this operation is cancelled.")
             return 0

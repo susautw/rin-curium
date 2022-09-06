@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from typing import List, Optional
+from typing import Optional, Iterable
 
 
 class IConnection(ABC):
@@ -53,7 +53,7 @@ class IConnection(ABC):
         """
 
     @abstractmethod
-    def send(self, data: bytes, destinations: List[str]) -> Optional[int]:
+    def send(self, data: bytes, destinations: Iterable[str]) -> Optional[int]:
         """
         Send data to given destinations on the backend server.
 
