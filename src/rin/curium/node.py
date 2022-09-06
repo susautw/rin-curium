@@ -17,7 +17,7 @@ from rin.docutils.flag import ClassNamedFlag, Flag
 
 from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc
 from .connections import RedisConnection
-from .response_handlers import BlockUntilAllReceived
+from . import response_handlers
 from .serializers import JSONSerializer
 from .utils import cmd_to_dict_filter, atomicmethod
 
@@ -209,9 +209,9 @@ class Node:
             response_timeout: Optional[float]
     ) -> ResponseHandlerBase[R]:
         if response_handler is None:
-            return BlockUntilAllReceived(timeout=response_timeout)
+            return response_handlers.BlockUntilAllReceived(timeout=response_timeout)
         elif response_timeout is not None:
-            raise ValueError("response_timeout must be None when response_handler exists")
+            raise ValueError("cannot set both response_handler and response_timeout")
         return response_handler
 
     def _get_response_handler_by_cid(self, cid: str, default=None) -> Optional[ResponseHandlerBase]:

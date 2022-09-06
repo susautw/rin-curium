@@ -98,3 +98,18 @@ def test_send(mocker, node):
     mock_add_response_handler.assert_called_once_with(expected_cid, mock_rh)
 
 
+def test_create_response_handler__pass_through(node):
+    mock_rh = MagicMock()
+    assert node._create_response_handler(response_handler=mock_rh, response_timeout=None) is mock_rh
+
+
+@pytest.mark.parametrize("timeout", [None, 10])
+def test_create_response_handler__create_default(mocker, node, timeout):
+    mock_rh_default_cls = mocker.patch("rin.curium.response_handlers.BlockUntilAllReceived")
+    node._create_response_handler(response_handler=None, response_timeout=timeout)
+    mock_rh_default_cls.assert_called_once_with(timeout=timeout)
+
+
+def test_create_response_handler__invalid_params(node):
+    with pytest.raises(ValueError, match="cannot set both response_handler and response_timeout"):
+        node._create_response_handler(..., ...)
