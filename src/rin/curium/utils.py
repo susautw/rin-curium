@@ -7,6 +7,7 @@ from threading import Lock, RLock
 from typing import Callable, Type
 
 from rin.docutils import markers
+from rin.docutils.flag import Flag
 
 
 class Atomic:
@@ -81,21 +82,35 @@ def atomicfunction(fn):
 @markers.decorator
 class atomicmethod:
     """ A descriptor converts a method to an atomic operation """
+    MARK_AS_DELETED = Flag("MARK_AS_DELETED")
+
     def __init__(self, method):
-        self._method = method
+        self._default_method = method
+        self._instance_method_map = WeakKeyDictionary()
         self._instance_fn_map = WeakKeyDictionary()
         self._lock = Lock()
 
+    def __set_name__(self, owner, name):
+        self.__name__ = name
+
     def __get__(self, instance, owner):
         obj = owner if instance is None else instance
+        with self._lock:
+            method = self._instance_method_map.setdefault(obj, self._default_method)
+        if method is self.MARK_AS_DELETED:
+            raise AttributeError(f'{owner} object has no attribute {self.__name__}')
+        if not (hasattr(method, "__get__") and hasattr(method, "__call__")):
+            return method
+
+        bound_method = method.__get__(instance, owner)
+
         with self._lock:
             if obj in self._instance_fn_map:
                 return self._instance_fn_map[obj]
 
         lock = RLock()
-        bound_method = self._method.__get__(instance, owner)
 
-        @functools.wraps(self._method)
+        @functools.wraps(method)
         def wrapper(*args, **kwargs):
             with lock:
                 return bound_method(*args, **kwargs)
@@ -106,13 +121,16 @@ class atomicmethod:
         return wrapper
 
     def __set__(self, instance, value):
-        raise RuntimeError("change an atomicmethod is not allowed")
+        with self._lock:
+            self._instance_method_map[instance] = value
 
-    __delete__ = __set__
+    def __delete__(self, instance):
+        with self._lock:
+            self._instance_method_map[instance] = self.MARK_AS_DELETED
 
     @property
     def __isabstractmethod__(self):
-        return getattr(self._method, "__isabstractmethod__", False)
+        return getattr(self._default_method, "__isabstractmethod__", False)
 
 
 def cmd_to_dict_filter(p: cfg.PlaceHolder) -> bool:
