@@ -214,7 +214,7 @@ class Node:
             raise ValueError("cannot set both response_handler and response_timeout")
         return response_handler
 
-    def _get_response_handler_by_cid(self, cid: str, default=None) -> Optional[ResponseHandlerBase]:
+    def _get_response_handler(self, cid: str, default=None) -> Optional[ResponseHandlerBase]:
         with self._rh_lock:
             return self._sent_cmd_response_handlers.get(cid, default)
 
@@ -291,7 +291,7 @@ class Node:
         :param cid: command id
         :param response: response contents
         """
-        rh = self._get_response_handler_by_cid(cid)
+        rh = self._get_response_handler(cid)
         if rh is not None:
             rh.add_response(response)
         else:

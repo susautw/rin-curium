@@ -135,3 +135,38 @@ def test_create_response_handler__create_default(mocker, node, timeout):
 def test_create_response_handler__invalid_params(node):
     with pytest.raises(ValueError, match="cannot set both response_handler and response_timeout"):
         node._create_response_handler(..., ...)
+
+
+@pytest.mark.parametrize("opname, opcall, expected_opname, expected_call", [
+    ("_get_response_handler", call('0'), "get", [call('0', None)]),
+    ("_get_response_handler", call('0', ...), "get", [call('0', ...)]),
+    ("_add_response_handler", call('0', ...), "__setitem__", [call('0', ...)]),
+    ("_remove_response_handler", call('0'), "__delitem__", [call('0')])
+])
+def test_access_response_handler(mocker, node, opname, opcall, expected_opname, expected_call):
+    mock_rhs = mocker.patch.object(node, "_sent_cmd_response_handlers")
+    getattr(node, opname)(*opcall.args, **opcall.kwargs)
+    assert getattr(mock_rhs, expected_opname).call_args_list == expected_call
+
+
+@pytest.mark.parametrize("silent", [True, False])
+def test_remove_response_handler__silent(mocker, node, silent):
+    mock_rhs = mocker.patch.object(node, "_sent_cmd_response_handlers")
+    mock_rhs.__delitem__.side_effect = KeyError
+    with ExitStack() as stack:
+        if not silent:
+            # noinspection PyTypeChecker
+            #  type checker messed up
+            stack.enter_context(pytest.raises(KeyError))
+        node._remove_response_handler('0', silent)
+
+
+@pytest.mark.parametrize("raw_data", [b'data', None])
+def test_recv(mocker, node, raw_data):
+    mock_recv = mocker.patch.object(node._connection, "recv", side_effect=[raw_data])
+    expected_cmd = None if raw_data is None else object()
+    mock_deserialize = mocker.patch.object(node._serializer, "deserialize", side_effect=[expected_cmd])
+    assert node.recv(True, 10) == expected_cmd
+    mock_recv.assert_called_once_with(True, 10)
+    if raw_data is not None:
+        mock_deserialize.assert_called_once_with(raw_data)
