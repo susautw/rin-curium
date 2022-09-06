@@ -1,9 +1,10 @@
+from contextlib import ExitStack
 from unittest.mock import call, MagicMock
 
 import pytest
 from fakeredis import FakeRedis
 
-from rin.curium import RedisConnection, Node, logger
+from rin.curium import RedisConnection, Node, logger, CommandBase
 from rin.curium.node import CommandWrapper
 from units.fake_commands import MyCommand
 
@@ -96,6 +97,27 @@ def test_send(mocker, node):
     assert mock_send_no_response.call_args_list[0].args[1] is destinations
     mock_rh.set_num_receivers.assert_called_once_with(expected_num_receivers)
     mock_add_response_handler.assert_called_once_with(expected_cid, mock_rh)
+
+
+@pytest.mark.parametrize("destinations, expected_destinations, has_warning", [
+    ("x", {"x"}, False),
+    (["x", "y"], {"x", "y"}, False),
+    (["x", "x", "y"], {"x", "y"}, False),  # should estimate duplications
+    (["all", "x"], {"all"}, True)
+])
+def test_send_no_response(mocker, node, destinations, expected_destinations, has_warning):
+    cmd = MagicMock(spec=CommandBase)
+    expected_data = b'data'
+    expected_num_receivers = 10
+    mock_serialize = mocker.patch.object(node._serializer, "serialize", side_effect=[expected_data])
+    mock_send = mocker.patch.object(node._connection, "send", side_effect=[expected_num_receivers])
+
+    with ExitStack() as stack:
+        if has_warning:
+            stack.enter_context(pytest.warns(RuntimeWarning))
+        assert node.send_no_response(cmd, destinations) == expected_num_receivers
+    mock_serialize.assert_called_once_with(cmd)
+    mock_send.assert_called_once_with(expected_data, expected_destinations)
 
 
 def test_create_response_handler__pass_through(node):
