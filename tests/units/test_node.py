@@ -277,7 +277,7 @@ def test_recv_until_close__disconnected_when_recv(mocker, node, is_manually_clos
     (4, 3)
 ])
 def test_recv_until_close__reconnect(mocker, node, failed_times, max_tries):
-    reconnect_side_effect: List = [exc.ConnectionFailedError]*failed_times
+    reconnect_side_effect: List = [exc.ConnectionFailedError] * failed_times
     reconnect_side_effect.append(None)
     mock_reconnect = mocker.patch.object(
         node._connection, "reconnect", side_effect=reconnect_side_effect
@@ -340,3 +340,27 @@ def test_error_logging(mocker):
         f"An Exception raised in the command execution: {cmd}",
         exc_info=exc_
     )
+
+
+def test_check_response_handler(mocker, node):
+    mocker.patch.object(node._closed_event, "wait", side_effect=[False, True])
+    rh_not_finalized = MagicMock()
+    rh_not_finalized.finalize.return_value = False
+
+    rh_finalized = MagicMock()
+    rh_finalized.finalize.return_value = True
+    rhs = {
+        "0": rh_not_finalized,
+        "1": rh_finalized
+    }
+
+    mocker.patch.object(node._sent_cmd_response_handlers, "copy", return_value=rhs)
+    mock_remove_rh = mocker.patch.object(node, "_remove_response_handler")
+    mocker.patch("time.sleep")
+
+    node._check_response_handlers()
+
+    for rh in rhs.values():
+        rh.finalize.assert_called_once_with()
+
+    mock_remove_rh.assert_called_once_with("1", silent=True)

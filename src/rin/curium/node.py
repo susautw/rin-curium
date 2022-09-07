@@ -4,32 +4,21 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import ExitStack
-from functools import lru_cache
 from itertools import count
 from threading import Lock, Thread, Event
 from typing import TypeVar, Optional, Type, Any, Dict, Callable, Union, overload, Iterable
 from weakref import WeakValueDictionary
 
-from fancy import config as cfg
 from redis import Redis
-from rin.docutils.flag import ClassNamedFlag, Flag
 
-from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc
+from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc, NoContextSpecified
+from .commands import AddResponse, CommandWrapper
 from .connections import RedisConnection
 from . import response_handlers
 from .serializers import JSONSerializer
-from .utils import cmd_to_dict_filter, atomicmethod
+from .utils import atomicmethod
 
 R = TypeVar("R")
-
-
-class NoResponseType(ClassNamedFlag):
-    pass
-
-
-NoResponse = NoResponseType()  #: Represents there is no response returned from a command
-
-NoContextSpecified = Flag("NoContextSpecified")  #: Represents no context specified while registering a command
 
 
 def error_logging(cmd: CommandBase, exc_: BaseException) -> None:
@@ -395,63 +384,3 @@ class Node:
 
     def __del__(self) -> None:
         self.close()
-
-
-def _to_cmd_dict(o) -> dict:
-    if isinstance(o, CommandBase):
-        return o.to_dict(prevent_circular=True, filter=cmd_to_dict_filter)
-    elif isinstance(o, dict):
-        return o
-    raise TypeError(f"Type of {o} neither CommandBase nor dict")
-
-
-class CommandWrapper(CommandBase[NoResponseType]):
-    nid: str = cfg.Option(required=True, type=str)
-    cid: str = cfg.Option(required=True, type=str)
-    cmd: dict = cfg.Option(required=True, type=_to_cmd_dict)
-
-    __cmd_name__ = "__cmd_wrapper__"
-
-    def execute(self, ctx: Node) -> NoResponseType:
-        cmd = self.get_cmd(ctx)
-        response = cmd.execute(ctx)
-        if not isinstance(response, NoResponseType):
-            if self.nid == ctx.nid:
-                ctx.add_response(self.cid, response)
-            else:
-                ctx.send_no_response(AddResponse(cid=self.cid, response=response), self.nid)
-        return NoResponse
-
-    @lru_cache
-    def get_cmd(self, node: Node) -> CommandBase:
-        s = node.get_cmd_context(self.__cmd_name__)
-        assert isinstance(s, ISerializer)
-        return s.deserialize(self.cmd)
-
-    # noinspection PyShadowingBuiltins
-    def to_dict(
-            self,
-            recursive=True,
-            prevent_circular=True, *,
-            load_lazies=None,
-            filter: Callable[[cfg.PlaceHolder], bool] = None
-    ) -> dict:
-        """
-        Convert this command wrapper to a :class:`dict`.
-        """
-        if not recursive or not prevent_circular:
-            warnings.warn("param recursive and prevent_circular are always True in CommandWrapper. "
-                          "set these param will not affect anything.", category=UserWarning)
-        # turn off recursive because the attribute `cmd` has been converted before.
-        return super().to_dict(recursive=False, prevent_circular=True, filter=filter)
-
-
-class AddResponse(CommandBase[NoResponseType]):
-    cid: str = cfg.Option(required=True, type=str)
-    response: Any = cfg.Option(required=True)
-
-    __cmd_name__ = '__cmd_add_response__'
-
-    def execute(self, ctx: Node) -> NoResponseType:
-        ctx.add_response(self.cid, self.response)
-        return NoResponse
