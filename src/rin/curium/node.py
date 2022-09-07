@@ -296,9 +296,7 @@ class Node:
             rh.add_response(response)
         else:
             response_str = f'{response}'
-            if len(response_str) > 50:
-                response_str = response_str[:50] + '...'
-            logging.warning(f"Received response {response_str}, but command {cid} not found")
+            logger.warning(f"Received response {response_str}, but command {cid} not found")
 
     def recv_until_close(
             self,
