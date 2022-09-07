@@ -170,3 +170,43 @@ def test_recv(mocker, node, raw_data):
     mock_recv.assert_called_once_with(True, 10)
     if raw_data is not None:
         mock_deserialize.assert_called_once_with(raw_data)
+
+
+@pytest.mark.parametrize("opcall, expected_ctx, has_context", [
+    (call(), None, False),
+    (call(...), ..., True)
+])
+def test_register_cmd(mocker, node, opcall, expected_ctx, has_context):
+    mock_register_cmd = mocker.patch.object(node._serializer, "register_cmd")
+    mock_ctx = mocker.patch.object(node, "_cmd_contexts")
+
+    node.register_cmd(MyCommand, *opcall.args, **opcall.kwargs)
+
+    mock_register_cmd.assert_called_once_with(MyCommand)
+    if has_context:
+        mock_ctx.__setitem__.assert_called_once_with(MyCommand.__cmd_name__, expected_ctx)
+    else:
+        assert mock_ctx.__setitem__.call_count == 0
+
+
+@pytest.mark.parametrize("key, expected_name", [
+    ("x", "x"),
+    (MyCommand, "my_command")
+])
+def test_get_cmd_context(mocker, node, key, expected_name):
+    mock_ctx = mocker.patch.object(node, "_cmd_contexts")
+    node.get_cmd_context(key)
+    mock_ctx.__getitem__.assert_called_once_with(expected_name)
+
+
+def test_get_cmd_context__with_wrong_signature(node):
+    with pytest.raises(TypeError, match=f"No signature matched to execute this method"):
+        # noinspection PyTypeChecker
+        node.get_cmd_context(10)
+
+
+def test_get_cmd_context__but_key_does_not_exist(mocker, node):
+    mocker.patch.object(node, "_cmd_contexts")
+    node._cmd_contexts.__getitem__.side_effect = KeyError
+    with pytest.raises(KeyError):
+        node.get_cmd_context("key")

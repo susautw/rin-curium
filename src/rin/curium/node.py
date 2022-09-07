@@ -276,7 +276,7 @@ class Node:
         """
         if isinstance(key, str):
             name = key
-        elif issubclass(key, CommandBase):
+        elif isinstance(key, type) and issubclass(key, CommandBase):
             name = key.__cmd_name__
         else:
             raise TypeError(f"No signature matched to execute this method")
