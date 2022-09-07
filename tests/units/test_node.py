@@ -1,4 +1,5 @@
 from contextlib import ExitStack
+from typing import List
 from unittest.mock import call, MagicMock
 
 import pytest
@@ -236,9 +237,6 @@ def test_add_response__but_response_handler_does_not_exist(mocker, node):
     mock_warning.assert_called_once_with(expected_msg)
 
 
-
-
-
 def test_recv_until_close(mocker, node):
     mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result([
         False, True
@@ -271,14 +269,52 @@ def test_recv_until_close__disconnected_when_recv(mocker, node, is_manually_clos
         assert mock_reconnect_to_backend.call_count == 0
 
 
+@pytest.mark.parametrize("failed_times, max_tries", [
+    (0, 3),
+    (1, 3),
+    (2, 3),
+    (3, 3),
+    (4, 3)
+])
+def test_recv_until_close__reconnect(mocker, node, failed_times, max_tries):
+    reconnect_side_effect: List = [exc.ConnectionFailedError]*failed_times
+    reconnect_side_effect.append(None)
+    mock_reconnect = mocker.patch.object(
+        node._connection, "reconnect", side_effect=reconnect_side_effect
+    )
+    mock_warning = mocker.patch.object(logger, "warning")
+    mocker.patch("time.sleep")
+    expected_reconnect_count = min(failed_times + 1, max_tries)
+    expected_msgs = [
+        call(f"Reconnecting to the backend server: {i}")
+        for i in range(expected_reconnect_count)
+    ]
+    reconnected = failed_times < max_tries
+
+    if reconnected:
+        expected_msgs.append(call(f"Server reconnected"))
+
+    with ExitStack() as stack:
+        if not reconnected:
+            # noinspection PyTypeChecker
+            stack.enter_context(pytest.raises(exc.ServerDisconnectedError))
+
+        node._Node__reconnect_to_backend(max_tries, 1)
+
+    assert mock_reconnect.call_count == expected_reconnect_count
+    assert mock_warning.call_args_list == expected_msgs
+
+
 def test_recv_until_close__error_handling(mocker, node):
     cmd_raises_error = ACommandRaisingError({})
+    following_cmd = ACommandDoNothing({})
     mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result([
         False, False, True
     ]))
+    spy_execute = mocker.spy(following_cmd, "execute")
     mocker.patch.object(node, "recv", side_effect=[
         cmd_raises_error,
-        ACommandDoNothing({})
+        following_cmd
     ])
     error_handler_mock = MagicMock()
 
@@ -286,6 +322,7 @@ def test_recv_until_close__error_handling(mocker, node):
     node.recv_until_close(error_handler=error_handler_mock)
 
     error_handler_mock.assert_called_once()
+    spy_execute.assert_called_once_with(node)
     assert error_handler_mock.call_args.args[0] is cmd_raises_error
     assert str(error_handler_mock.call_args.args[1]) == "an Exception"
 

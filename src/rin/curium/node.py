@@ -364,7 +364,8 @@ class Node:
                 self._connection.reconnect()
                 logger.warning(f"Server reconnected")
                 return
-            except exc.ConnectionFailedError as last_err:
+            except exc.ConnectionFailedError as e:
+                last_err = e
                 time.sleep(reconnect_interval)
         raise exc.ServerDisconnectedError(last_err)
 
