@@ -4,7 +4,7 @@ from unittest.mock import call, MagicMock
 import pytest
 from fakeredis import FakeRedis
 
-from rin.curium import RedisConnection, Node, logger, CommandBase
+from rin.curium import RedisConnection, Node, logger, CommandBase, exc
 from rin.curium.node import CommandWrapper
 from units.fake_commands import MyCommand
 
@@ -38,6 +38,7 @@ def test_connect(mocker, node, connection, send_only):
 @pytest.mark.parametrize("close_node", [False, True])
 def test_connect__but_already_connected_or_closed(mocker, node, close_node):
     mock_warning = mocker.patch.object(logger, "warning")
+    mocker.patch("threading.Thread.start")
     node.connect()
     if close_node:
         node.close()
@@ -232,3 +233,43 @@ def test_add_response__but_response_handler_does_not_exist(mocker, node):
     expected_msg = "Received response <response>, but command 10 not found"
     node.add_response(cid, response)
     mock_warning.assert_called_once_with(expected_msg)
+
+
+def keep_last_result(vals):
+    val = None
+    for val in vals:
+        yield val
+    while True:
+        yield val
+
+
+def test_recv_until_close(mocker, node):
+    mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result([
+        False, True
+    ]))
+    cmd = MyCommand(x=1, y=[1, 2])
+    mock_execute = mocker.patch.object(cmd, "execute")
+    mock_recv = mocker.patch.object(node, "recv", side_effect=[cmd])
+    excepted_sleep = 1
+    node.recv_until_close(sleep=excepted_sleep)
+    mock_execute.assert_called_once_with(node)
+    mock_recv.assert_called_once_with(block=True, timeout=excepted_sleep)
+
+
+@pytest.mark.parametrize("is_manually_closed", [True, False])
+def test_recv_until_close__disconnected_when_recv(mocker, node, is_manually_closed):
+    if is_manually_closed:
+        wait_side_effect = [False, True]
+    else:
+        wait_side_effect = [False, False, True]
+
+    mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result(wait_side_effect))
+    mocker.patch.object(node, "recv", side_effect=exc.CuriumConnectionError)
+    mock_reconnect_to_backend = mocker.patch.object(node, "_Node__reconnect_to_backend")
+
+    node.recv_until_close()
+
+    if not is_manually_closed:
+        mock_reconnect_to_backend.assert_called_once()
+    else:
+        assert mock_reconnect_to_backend.call_count == 0
