@@ -210,3 +210,25 @@ def test_get_cmd_context__but_key_does_not_exist(mocker, node):
     node._cmd_contexts.__getitem__.side_effect = KeyError
     with pytest.raises(KeyError):
         node.get_cmd_context("key")
+
+
+def test_add_response(mocker, node):
+    mock_rh = MagicMock()
+    expected_cid = "10"
+    expected_response = MagicMock()
+    mock_get_response_handler = mocker.patch.object(node, "_get_response_handler", side_effect=[mock_rh])
+    node.add_response(expected_cid, expected_response)
+
+    mock_get_response_handler.assert_called_once_with(expected_cid)
+    mock_rh.add_response.assert_called_once_with(expected_response)
+
+
+def test_add_response__but_response_handler_does_not_exist(mocker, node):
+    mocker.patch.object(node, "_get_response_handler", side_effect=[None])
+    mock_warning = mocker.patch.object(logger, "warning")
+
+    cid = "10"
+    response = "<response>"
+    expected_msg = "Received response <response>, but command 10 not found"
+    node.add_response(cid, response)
+    mock_warning.assert_called_once_with(expected_msg)
