@@ -5,8 +5,9 @@ import pytest
 from fakeredis import FakeRedis
 
 from rin.curium import RedisConnection, Node, logger, CommandBase, exc
-from rin.curium.node import CommandWrapper
-from units.fake_commands import MyCommand
+from rin.curium.node import CommandWrapper, error_logging
+from units.fake_commands import MyCommand, ACommandRaisingError, ACommandDoNothing
+from units.helper import keep_last_result
 
 
 @pytest.fixture
@@ -235,12 +236,7 @@ def test_add_response__but_response_handler_does_not_exist(mocker, node):
     mock_warning.assert_called_once_with(expected_msg)
 
 
-def keep_last_result(vals):
-    val = None
-    for val in vals:
-        yield val
-    while True:
-        yield val
+
 
 
 def test_recv_until_close(mocker, node):
@@ -273,3 +269,37 @@ def test_recv_until_close__disconnected_when_recv(mocker, node, is_manually_clos
         mock_reconnect_to_backend.assert_called_once()
     else:
         assert mock_reconnect_to_backend.call_count == 0
+
+
+def test_recv_until_close__error_handling(mocker, node):
+    cmd_raises_error = ACommandRaisingError({})
+    mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result([
+        False, False, True
+    ]))
+    mocker.patch.object(node, "recv", side_effect=[
+        cmd_raises_error,
+        ACommandDoNothing({})
+    ])
+    error_handler_mock = MagicMock()
+
+    # noinspection PyTypeChecker
+    node.recv_until_close(error_handler=error_handler_mock)
+
+    error_handler_mock.assert_called_once()
+    assert error_handler_mock.call_args.args[0] is cmd_raises_error
+    assert str(error_handler_mock.call_args.args[1]) == "an Exception"
+
+
+def test_error_logging(mocker):
+    """
+    Test the default error handler for :meth:`Node.recv_until_close`
+    """
+    from rin.curium import logger
+    mock_exception = mocker.patch.object(logger, "exception")
+    cmd = MagicMock(spec=CommandBase)
+    exc_ = Exception()
+    error_logging(cmd, exc_)
+    mock_exception.assert_called_once_with(
+        f"An Exception raised in the command execution: {cmd}",
+        exc_info=exc_
+    )

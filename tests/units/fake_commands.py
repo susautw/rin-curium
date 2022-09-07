@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, NoReturn
 
-from rin.curium import CommandBase, Node
+from rin.curium import CommandBase, Node, NoResponse
 from fancy import config as cfg
 
 
@@ -23,3 +23,14 @@ class AnotherCommand(CommandBase):
 
     def execute(self, ctx: "Node") -> None:
         pass
+
+
+class ACommandRaisingError(CommandBase):
+
+    def execute(self, ctx: Node) -> NoReturn:
+        raise Exception("an Exception")
+
+
+class ACommandDoNothing(CommandBase):
+    def execute(self, ctx: "Node") -> NoResponse:
+        return NoResponse
