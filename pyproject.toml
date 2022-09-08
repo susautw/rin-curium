@@ -7,31 +7,24 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "NAME"
-version = "VERSION"
-description = "DESCRIPTION"
+name = "rin-curium"
+description = "rin-curium is a packages intended to resolve internodes communication"
 readme = "README.md"
-requires-python = ">=PYTHON_VERSION"
-keywords = []
-license = {text = "MIT License"}
+requires-python = ">=3.8"
+keywords = ["communication", "command"]
+license = { text = "MIT License" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent"
 ]
 
-dependencies = [
-    "DEPENDENCIES"
-]
-
-[project.optional-dependencies]
-NAME = ["PROJECTS"]
-
-[project.scripts]
-my-script = "my_package.module:function"
+dynamic = ["version", "dependencies"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["my_package*"]
-exclude = ["my_package.tests*"]
-namespaces = false
+namespaces = true
+
+[tool.setuptools.dynamic]
+version = { attr = "rin.curium.__version__" }
+dependencies = { file = "requirements.txt" }
