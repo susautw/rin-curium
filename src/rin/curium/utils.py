@@ -1,7 +1,7 @@
 import functools
 from weakref import WeakKeyDictionary
 
-from fancy import config as cfg
+from . import cfg
 
 from threading import Lock, RLock
 from typing import Callable, Type

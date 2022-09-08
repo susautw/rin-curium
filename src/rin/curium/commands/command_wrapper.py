@@ -2,10 +2,8 @@ import warnings
 from functools import lru_cache
 from typing import Callable, TYPE_CHECKING
 
-from fancy import config as cfg
-
-from rin.curium import CommandBase, NoResponseType, NoResponse, ISerializer
-from rin.curium.utils import cmd_to_dict_filter
+from .. import CommandBase, NoResponseType, NoResponse, ISerializer, cfg
+from ..utils import cmd_to_dict_filter
 from .add_response import AddResponse
 
 if TYPE_CHECKING:

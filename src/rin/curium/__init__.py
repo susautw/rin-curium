@@ -1,4 +1,7 @@
-from ._logger import logger as logger  #: rin-curium logger
+from ._logger import logger as logger  # rin-curium logger
+# noinspection PyUnresolvedReferences
+# convenience for importing
+from fancy import config as cfg
 from .constants import NoResponseType, NoResponse, NoContextSpecified
 
 from .response_handler_base import ResponseHandlerBase

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, TYPE_CHECKING
 
-from fancy import config as cfg
+from . import cfg
 
 if TYPE_CHECKING:
     from . import Node

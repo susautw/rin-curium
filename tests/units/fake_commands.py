@@ -1,7 +1,6 @@
 from typing import List, NoReturn
 
-from rin.curium import CommandBase, Node, NoResponse
-from fancy import config as cfg
+from rin.curium import CommandBase, Node, NoResponse, cfg
 
 
 class MyCommand(CommandBase):

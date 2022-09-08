@@ -1,8 +1,6 @@
 from typing import Any, TYPE_CHECKING
 
-from fancy import config as cfg
-
-from rin.curium import CommandBase, NoResponseType, NoResponse
+from .. import CommandBase, NoResponseType, NoResponse, cfg
 
 if TYPE_CHECKING:
     from .. import Node
