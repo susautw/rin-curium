@@ -1,3 +1,4 @@
 fancy-config~=0.12.0
 rin-jsonutils~=1.1.0
+rin-docutils~=1.0.0
 redis~=4.3.4
