@@ -21,16 +21,15 @@ from .utils import atomicmethod
 R = TypeVar("R")
 
 
-def error_logging(cmd: CommandBase, exc_: BaseException) -> None:
+def error_logging(e: exc.CommandExecutionError) -> None:
     """
     Default error handler for :meth:`Node.recv_until_close`
 
-    :param cmd: the command which raises the exception
-    :param exc_: incoming exception
+    :param e: An Exception contains the failed command and the occurred exception.
     """
     logger.exception(
-        f"An Exception raised in the command execution: {cmd}",
-        exc_info=exc_
+        f"An Exception raised in the command execution: {e.cmd}",
+        exc_info=e.e
     )
 
 
@@ -293,7 +292,7 @@ class Node:
             close_when_exit: bool = True,
             reconnect_max_tries: int = 10,
             reconnect_interval: float = 10,
-            error_handler: Callable[[CommandBase, BaseException], None] = error_logging
+            error_handler: Callable[[exc.CommandExecutionError], None] = error_logging
     ) -> None:
         """
         Receive and execute commands until this node is closed.
@@ -335,13 +334,16 @@ class Node:
     def __create_result_error_handler(
             self,
             cmd: CommandBase,
-            error_handler: Callable[[CommandBase, BaseException], None]
+            error_handler: Callable[[exc.CommandExecutionError], None]
     ):
         @functools.wraps(error_handler)
         def wrapped_error_handler(future: Future) -> None:
-            exc_ = future.exception()
-            if exc_ is not None:
-                error_handler(cmd, exc_)
+            exception = future.exception()
+            if exception is not None:
+                try:
+                    raise exc.CommandExecutionError(cmd, exception)
+                except exc.CommandExecutionError as e:
+                    error_handler(e)
 
         return wrapped_error_handler
 

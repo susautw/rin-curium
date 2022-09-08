@@ -6,6 +6,7 @@ import pytest
 from fakeredis import FakeRedis
 
 from rin.curium import RedisConnection, Node, logger, CommandBase, exc
+from rin.curium.exc import CommandExecutionError
 from rin.curium.node import CommandWrapper, error_logging
 from units.fake_commands import MyCommand, ACommandRaisingError, ACommandDoNothing
 from units.helper import keep_last_result
@@ -323,8 +324,9 @@ def test_recv_until_close__error_handling(mocker, node):
 
     error_handler_mock.assert_called_once()
     spy_execute.assert_called_once_with(node)
-    assert error_handler_mock.call_args.args[0] is cmd_raises_error
-    assert str(error_handler_mock.call_args.args[1]) == "an Exception"
+    e: Exception = error_handler_mock.call_args.args[0]
+    assert e.args[0] is cmd_raises_error
+    assert str(e.args[1]) == "an Exception"
 
 
 def test_error_logging(mocker):
@@ -335,7 +337,7 @@ def test_error_logging(mocker):
     mock_exception = mocker.patch.object(logger, "exception")
     cmd = MagicMock(spec=CommandBase)
     exc_ = Exception()
-    error_logging(cmd, exc_)
+    error_logging(CommandExecutionError(cmd, exc_))
     mock_exception.assert_called_once_with(
         f"An Exception raised in the command execution: {cmd}",
         exc_info=exc_

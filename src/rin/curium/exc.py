@@ -1,5 +1,20 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rin.curium import CommandBase
+
+
 class CuriumError(Exception):
     """ Base class for curium exceptions """
+
+
+class CommandExecutionError(CuriumError, RuntimeError):
+    """ Command raised an error during execution """
+
+    def __init__(self, cmd: "CommandBase", e: BaseException):
+        super().__init__(cmd, e)
+        self.cmd = cmd
+        self.e = e
 
 
 class CuriumConnectionError(CuriumError):
