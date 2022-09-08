@@ -9,6 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rin-curium"
 description = "rin-curium is a packages intended to resolve internodes communication"
+urls = {GitHub = "https://github.com/susautw/rin-curium"}
 readme = "README.md"
 requires-python = ">=3.8"
 keywords = ["communication", "command"]
