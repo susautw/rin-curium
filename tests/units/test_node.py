@@ -306,6 +306,21 @@ def test_recv_until_close__reconnect(mocker, node, failed_times, max_tries):
     assert mock_warning.call_args_list == expected_msgs
 
 
+@pytest.mark.parametrize("exception, expected_log", [
+    (exc.InvalidFormatError("data"), "received command with invalid format: data"),
+    (exc.CommandNotRegisteredError("cmd"), "received a unknown command: 'cmd'")
+])
+def test_recv_until_close__error_while_receiving(mocker, node, exception, expected_log):
+    mocker.patch.object(node._closed_event, "wait", side_effect=keep_last_result(
+        [False, True]
+    ))
+    mocker.patch.object(node, "recv", side_effect=exception)
+    mock_exception = mocker.patch.object(logger, "exception")
+    node.recv_until_close()
+
+    mock_exception.assert_called_once_with(expected_log, exc_info=exception)
+
+
 def test_recv_until_close__error_handling(mocker, node):
     cmd_raises_error = ACommandRaisingError({})
     following_cmd = ACommandDoNothing({})

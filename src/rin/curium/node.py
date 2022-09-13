@@ -308,6 +308,7 @@ class Node:
         :param reconnect_max_tries: the max number of times to reconnect
         :param reconnect_interval: the interval between reconnects
         :param error_handler: a callable handles exceptions raised by commands
+        :raises :~exc.ServerDisconnectedError: when backend server disconnected and not able to reconnect.
         """
         if num_workers is None:
             num_workers = max(os.cpu_count(), 3)
@@ -329,6 +330,10 @@ class Node:
                     if self._closed_event.wait(0):  # connection closed while blocking
                         break
                     self.__reconnect_to_backend(reconnect_max_tries, reconnect_interval)
+                except exc.InvalidFormatError as e:
+                    logger.exception(f"received command with invalid format: {e}", exc_info=e)
+                except exc.CommandNotRegisteredError as e:
+                    logger.exception(f"received a unknown command: {e}", exc_info=e)
             logger.info("connection closed")
 
     def __create_result_error_handler(
