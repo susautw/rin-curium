@@ -11,4 +11,4 @@ from .iserializer import ISerializer
 from .connections import RedisConnection
 from .node import Node
 
-__version__ = '0.1.2'
+__version__ = '0.2.0'
