@@ -1,3 +1,4 @@
+import re
 from contextlib import ExitStack
 from typing import List
 from unittest.mock import call, MagicMock
@@ -342,6 +343,41 @@ def test_recv_until_close__error_handling(mocker, node):
     e: Exception = error_handler_mock.call_args.args[0]
     assert e.args[0] is cmd_raises_error
     assert str(e.args[1]) == "an Exception"
+
+
+@pytest.mark.parametrize("call_args, expected_recv_call, expected_thread_init_call", [
+    (call(0.5, name="tn"), call(sleep=0.5), call(name="tn")),
+    (call(0.5, None), call(sleep=0.5, num_workers=None), call()),
+    (call(0.5, num_workers=3, name="tn"), call(sleep=0.5, num_workers=3), call(name="tn"))
+])
+def test_recv_until_close_in_thread(
+        node,
+        call_args,
+        expected_recv_call,
+        expected_thread_init_call
+):
+    mock_thread = MagicMock()
+    mock_factory = MagicMock(return_value=mock_thread)
+    assert node.recv_until_close_in_thread(
+        *call_args.args, thread_factory=mock_factory, **call_args.kwargs
+    ) is mock_thread
+    mock_factory.assert_called_once_with(
+        target=node.recv_until_close,
+        kwargs=expected_recv_call.kwargs,
+        **expected_thread_init_call.kwargs
+    )
+
+
+@pytest.mark.parametrize("call_args, kw_name", [
+    (call(args=()), "args"),
+    (call(target=1), "target"),
+    (call(kwargs={}), "kwargs")
+])
+def test_recv_until_close_in_thread__with_invalid_parameters(node, call_args, kw_name):
+    expected_error_msg = f"invalid parameter: {kw_name}({{val}})"
+    mock_factory = MagicMock()
+    with pytest.raises(ValueError, match=re.escape(expected_error_msg.format(val=call_args.kwargs[kw_name]))):
+        node.recv_until_close_in_thread(*call_args.args, thread_factory=mock_factory, **call_args.kwargs)
 
 
 def test_error_logging(mocker):
