@@ -11,7 +11,7 @@ from weakref import WeakValueDictionary
 
 from redis import Redis
 
-from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc, NoContextSpecified
+from . import CommandBase, IConnection, ResponseHandlerBase, ISerializer, logger, exc, Unspecified
 from .commands import AddResponse, CommandWrapper
 from .connections import RedisConnection
 from . import response_handlers
@@ -49,6 +49,8 @@ class Node:
     _cmd_contexts_lock: Lock
 
     _closed_event: Event
+
+    _invalid_params_to_create_thread = {"target", "args", "kwargs"}
 
     def __init__(
             self,
@@ -235,7 +237,7 @@ class Node:
         cmd = self._serializer.deserialize(raw_data)
         return cmd
 
-    def register_cmd(self, cmd_typ: Type[CommandBase], ctx: Any = NoContextSpecified) -> None:
+    def register_cmd(self, cmd_typ: Type[CommandBase], ctx: Any = Unspecified) -> None:
         """
         Register a command
 
@@ -245,7 +247,7 @@ class Node:
         """
         with self._cmd_contexts_lock:
             self._serializer.register_cmd(cmd_typ)
-            if ctx is not NoContextSpecified:
+            if ctx is not Unspecified:
                 self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
 
     # @formatter:off
@@ -373,6 +375,49 @@ class Node:
                 if rh.finalize():
                     self._remove_response_handler(cid, silent=True)
             time.sleep(self._check_response_handlers_interval)
+
+    def recv_until_close_in_thread(
+            self,
+            sleep: float = Unspecified,
+            num_workers: int = Unspecified,
+            close_when_exit: bool = Unspecified,
+            reconnect_max_tries: int = Unspecified,
+            reconnect_interval: float = Unspecified,
+            error_handler: Callable[[exc.CommandExecutionError], None] = Unspecified,
+            thread_factory: Callable[..., Thread] = Thread,
+            **kwargs
+    ) -> Thread:
+        """
+        Create a thread for :meth:`recv_until_close`.
+
+        .. tip::
+           most parameters are described in the :meth:`recv_until_close`.
+
+        :param sleep: described in the :meth:`recv_until_close`.
+        :param num_workers: described in the :meth:`recv_until_close`.
+        :param close_when_exit: described in the :meth:`recv_until_close`.
+        :param reconnect_max_tries: described in the :meth:`recv_until_close`.
+        :param reconnect_interval: described in the :meth:`recv_until_close`.
+        :param error_handler: described in the :meth:`recv_until_close`.
+        :param thread_factory: A callable create a thread.
+           The callable accepts at least two keyword arguments: target and kwargs.
+        :param kwargs: optional keyword arguments pass to thread_factory
+        :return: A Thread object.
+        """
+        locals_cache = locals().copy()
+        for exclude_name in ['kwargs', 'self', 'thread_factory']:
+            del locals_cache[exclude_name]
+
+        method_kwargs = {name: val for name, val in locals_cache.items() if val is not Unspecified}
+        for name, value in kwargs.copy().items():
+            if name in self._invalid_params_to_create_thread:
+                raise ValueError(f"invalid parameter: {name}({value})")
+
+        return thread_factory(
+            target=self.recv_until_close,
+            kwargs=method_kwargs,
+            **kwargs
+        )
 
     @property
     def nid(self) -> str:

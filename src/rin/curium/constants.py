@@ -7,4 +7,4 @@ class NoResponseType(ClassNamedFlag):
 
 NoResponse = NoResponseType()  #: Represents there is no response returned from a command
 
-NoContextSpecified = Flag("NoContextSpecified")  #: Represents no context specified while registering a command
+Unspecified = Flag("Unspecified")  #: Represents a parameter hasn't specified in a invocation.
