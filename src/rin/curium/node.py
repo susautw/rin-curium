@@ -249,6 +249,9 @@ class Node:
             self._serializer.register_cmd(cmd_typ)
             if ctx is not Unspecified:
                 self._cmd_contexts[cmd_typ.__cmd_name__] = ctx
+        msg = f"registered a command ({cmd_typ.__cmd_name__}) "
+        msg += "without specifying a context" if ctx is Unspecified else f"with context {ctx!r}"
+        logger.debug(msg)
 
     # @formatter:off
     @overload

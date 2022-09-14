@@ -184,13 +184,20 @@ def test_recv(mocker, node, raw_data):
 def test_register_cmd(mocker, node, opcall, expected_ctx, has_context):
     mock_register_cmd = mocker.patch.object(node._serializer, "register_cmd")
     mock_ctx = mocker.patch.object(node, "_cmd_contexts")
+    mock_debug = mocker.patch.object(logger, "debug")
 
     node.register_cmd(MyCommand, *opcall.args, **opcall.kwargs)
 
     mock_register_cmd.assert_called_once_with(MyCommand)
     if has_context:
+        mock_debug.assert_called_once_with(
+            f"registered a command ({MyCommand.__cmd_name__}) with context {expected_ctx!r}"
+        )
         mock_ctx.__setitem__.assert_called_once_with(MyCommand.__cmd_name__, expected_ctx)
     else:
+        mock_debug.assert_called_once_with(
+            f'registered a command ({MyCommand.__cmd_name__}) without specifying a context'
+        )
         assert mock_ctx.__setitem__.call_count == 0
 
 
